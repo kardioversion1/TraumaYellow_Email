@@ -1,126 +1,126 @@
 {
-  "generated_at": "2026-04-05T02:29:40.589970Z",
+  "generated_at": "2026-04-05T02:32:51.131266Z",
   "model_version": "2026-04-05",
   "training_rows": 598,
   "holdout_rows": 14,
   "epoch": "2024-07-01",
   "last_actual": "2026-03-18",
-  "mae": 22.12,
+  "mae": 7.42,
   "metrics": {
-    "mae": 22.12,
-    "within_10": 7.1,
-    "surge_recall": 100.0
+    "mae": 7.42,
+    "within_10": 71.4,
+    "surge_recall": 66.7
   },
   "top_features": {
-    "month_index": 0.6670344471931458,
-    "is_weekend": 0.09838598966598511,
-    "days_since_epoch": 0.06411626189947128,
-    "dow_sin": 0.02854534052312374,
-    "visits_roll7": 0.02694229781627655,
-    "is_monday": 0.01739022321999073,
-    "visits_lag14": 0.012296658009290695,
-    "month_sin": 0.011958389542996883,
-    "visits_roll14": 0.011397740803658962,
-    "dow_cos": 0.010344156064093113
+    "is_weekend": 0.3866029977798462,
+    "month_index": 0.13952918350696564,
+    "dow_sin": 0.07821423560380936,
+    "is_monday": 0.06071900948882103,
+    "days_since_epoch": 0.05019761621952057,
+    "visits_lag14": 0.03442203253507614,
+    "visits_roll14": 0.031067388132214546,
+    "dow_cos": 0.028781836852431297,
+    "visits_lag7": 0.02700713463127613,
+    "is_friday": 0.026063721626996994
   },
   "forecast": [
     {
       "date": "2026-03-19",
       "day": "Thursday",
-      "predicted": 94,
-      "band_low": 85,
-      "band_high": 103
+      "predicted": 70,
+      "band_low": 61,
+      "band_high": 79
     },
     {
       "date": "2026-03-20",
       "day": "Friday",
-      "predicted": 95,
-      "band_low": 86,
-      "band_high": 104
+      "predicted": 71,
+      "band_low": 62,
+      "band_high": 80
     },
     {
       "date": "2026-03-21",
       "day": "Saturday",
-      "predicted": 91,
-      "band_low": 82,
-      "band_high": 100
+      "predicted": 66,
+      "band_low": 57,
+      "band_high": 75
     },
     {
       "date": "2026-03-22",
       "day": "Sunday",
-      "predicted": 91,
-      "band_low": 82,
-      "band_high": 100
+      "predicted": 66,
+      "band_low": 57,
+      "band_high": 75
     },
     {
       "date": "2026-03-23",
       "day": "Monday",
-      "predicted": 97,
-      "band_low": 88,
-      "band_high": 106
+      "predicted": 74,
+      "band_low": 65,
+      "band_high": 83
     },
     {
       "date": "2026-03-24",
       "day": "Tuesday",
-      "predicted": 93,
-      "band_low": 84,
-      "band_high": 102
+      "predicted": 71,
+      "band_low": 62,
+      "band_high": 80
     },
     {
       "date": "2026-03-25",
       "day": "Wednesday",
-      "predicted": 93,
-      "band_low": 84,
-      "band_high": 102
+      "predicted": 70,
+      "band_low": 61,
+      "band_high": 79
     },
     {
       "date": "2026-03-26",
       "day": "Thursday",
-      "predicted": 93,
-      "band_low": 84,
-      "band_high": 102
+      "predicted": 70,
+      "band_low": 61,
+      "band_high": 79
     },
     {
       "date": "2026-03-27",
       "day": "Friday",
-      "predicted": 95,
-      "band_low": 86,
-      "band_high": 104
+      "predicted": 70,
+      "band_low": 61,
+      "band_high": 79
     },
     {
       "date": "2026-03-28",
       "day": "Saturday",
-      "predicted": 86,
-      "band_low": 77,
-      "band_high": 95
+      "predicted": 63,
+      "band_low": 54,
+      "band_high": 72
     },
     {
       "date": "2026-03-29",
       "day": "Sunday",
-      "predicted": 85,
-      "band_low": 76,
-      "band_high": 94
+      "predicted": 65,
+      "band_low": 56,
+      "band_high": 74
     },
     {
       "date": "2026-03-30",
       "day": "Monday",
-      "predicted": 92,
-      "band_low": 83,
-      "band_high": 101
+      "predicted": 70,
+      "band_low": 61,
+      "band_high": 79
     },
     {
       "date": "2026-03-31",
       "day": "Tuesday",
-      "predicted": 91,
-      "band_low": 82,
-      "band_high": 100
+      "predicted": 69,
+      "band_low": 60,
+      "band_high": 78
     },
     {
       "date": "2026-04-01",
       "day": "Wednesday",
-      "predicted": 91,
-      "band_low": 82,
-      "band_high": 100
+      "predicted": 67,
+      "band_low": 58,
+      "band_high": 76
     }
   ]
 }
