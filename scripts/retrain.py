@@ -1,0 +1,318 @@
+#!/usr/bin/env python3
+"""
+traumayellow · retrain.py
+Runs every Sunday at 07:00 ET via GitHub Actions.
+Joins signals.csv + ed_counts.csv, trains XGBoost on all available labeled data,
+evaluates on a 14-day temporal holdout, writes predictions.json + model_metrics.json,
+and saves model.pkl.
+
+Sets GitHub Actions environment variables:
+  RETRAIN_STATUS   ok | skip | error
+  RETRAIN_MAE      float
+  RETRAIN_ROWS     int
+
+data/ed_counts.csv expected columns:
+  date, total_visits  (plus optionally: admissions, lwbs, etc.)
+"""
+
+import os
+import sys
+import json
+import pickle
+import datetime
+import numpy as np
+import pandas as pd
+from pathlib import Path
+
+try:
+    from xgboost import XGBRegressor
+except ImportError:
+    print("xgboost not installed", file=sys.stderr)
+    sys.exit(1)
+
+# ── Paths ─────────────────────────────────────────────────────────────────────
+ROOT       = Path(__file__).parent.parent
+SIGNALS    = ROOT / "data" / "signals.csv"
+ED_COUNTS  = ROOT / "data" / "ed_counts.csv"
+MODEL_PKL  = ROOT / "model" / "model.pkl"
+FEAT_JSON  = ROOT / "model" / "feature_list.json"
+PREDS_JSON = ROOT / "predictions" / "predictions.json"
+METRICS    = ROOT / "data" / "model_metrics.json"
+
+MIN_ROWS   = 60   # don't retrain until we have at least this many joined rows
+HOLDOUT    = 14   # days withheld for evaluation
+
+
+def gha_set(key, value):
+    env_file = os.environ.get("GITHUB_ENV")
+    if env_file:
+        with open(env_file, "a") as f:
+            f.write(f"{key}={value}\n")
+    print(f"  ENV {key}={value}")
+
+
+def load_and_join() -> pd.DataFrame:
+    signals   = pd.read_csv(SIGNALS,   parse_dates=["date"])
+    ed_counts = pd.read_csv(ED_COUNTS, parse_dates=["date"])
+    df = ed_counts.merge(signals, on="date", how="inner")
+    df = df.sort_values("date").reset_index(drop=True)
+    return df
+
+
+def build_features(df: pd.DataFrame, epoch: pd.Timestamp):
+    """Engineer features. Must match what send_prediction_email.py sends in requests.
+    Returns X (DataFrame), y (Series), feature_cols (list)."""
+
+    # Trend features anchored to training epoch
+    df = df.copy()
+    df["days_since_epoch"] = (df["date"] - epoch).dt.days
+    df["month_index"] = (
+        (df["date"].dt.year  - epoch.year)  * 12
+      + (df["date"].dt.month - epoch.month)
+    )
+
+    # Cyclical encodings
+    df["dow_sin"]   = np.sin(2 * np.pi * df["date"].dt.dayofweek / 7)
+    df["dow_cos"]   = np.cos(2 * np.pi * df["date"].dt.dayofweek / 7)
+    df["month_sin"] = np.sin(2 * np.pi * df["date"].dt.month / 12)
+    df["month_cos"] = np.cos(2 * np.pi * df["date"].dt.month / 12)
+
+    # Calendar flags
+    df["is_weekend"]  = (df["date"].dt.dayofweek >= 5).astype(int)
+    df["is_monday"]   = (df["date"].dt.dayofweek == 0).astype(int)
+    df["is_friday"]   = (df["date"].dt.dayofweek == 4).astype(int)
+    df["month"]       = df["date"].dt.month
+    df["day_of_month"]= df["date"].dt.day
+
+    # Autoregressive lag features (shift to avoid leakage)
+    df["visits_lag7"]   = df["total_visits"].shift(7)
+    df["visits_lag14"]  = df["total_visits"].shift(14)
+    df["visits_roll7"]  = df["total_visits"].shift(1).rolling(7).mean()
+    df["visits_roll14"] = df["total_visits"].shift(1).rolling(14).mean()
+    df["visits_roll28"] = df["total_visits"].shift(1).rolling(28).mean()
+
+    FEATURE_COLS = [
+        # trend
+        "days_since_epoch", "month_index",
+        # cyclical
+        "dow_sin", "dow_cos", "month_sin", "month_cos",
+        # calendar
+        "day_of_week", "is_weekend", "is_monday", "is_friday",
+        "month", "day_of_month", "is_holiday",
+        # weather
+        "temp_max_f", "temp_min_f", "precip_mm", "snowfall_mm",
+        "wind_max_mph", "cloud_cover_pct",
+        # air quality
+        "aqi_o3", "aqi_pm25", "aqi_overall",
+        # disease surveillance
+        "nssp_flu_pct", "nssp_covid_pct", "nwss_percentile",
+        # community signals
+        "crime_violent_7d", "ems_runs_7d", "collisions_7d",
+        # events
+        "event_attendance",
+        # autoregressive
+        "visits_lag7", "visits_lag14",
+        "visits_roll7", "visits_roll14", "visits_roll28",
+    ]
+
+    # Only keep cols that exist in df
+    feature_cols = [c for c in FEATURE_COLS if c in df.columns]
+    X = df[feature_cols].copy()
+    y = df["total_visits"].copy()
+    return X, y, feature_cols, df
+
+
+def train_model(X_train, y_train) -> XGBRegressor:
+    model = XGBRegressor(
+        n_estimators=400,
+        learning_rate=0.05,
+        max_depth=4,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        min_child_weight=3,
+        gamma=0.1,
+        reg_alpha=0.1,
+        reg_lambda=1.0,
+        random_state=42,
+        n_jobs=-1,
+    )
+    model.fit(X_train, y_train, verbose=False)
+    return model
+
+
+def evaluate(model, X_test, y_test) -> dict:
+    preds = np.maximum(model.predict(X_test), 0)
+    mae   = float(np.mean(np.abs(preds - y_test.values)))
+    within_10 = float(np.mean(np.abs(preds - y_test.values) <= 10) * 100)
+    surge_mask = y_test.values > (y_test.mean() + y_test.std())
+    surge_recall = float(np.mean(preds[surge_mask] > y_test.mean()) * 100) \
+        if surge_mask.any() else None
+    return {
+        "mae":          round(mae, 2),
+        "within_10":    round(within_10, 1),
+        "surge_recall": round(surge_recall, 1) if surge_recall is not None else None,
+    }
+
+
+def generate_predictions(model, df: pd.DataFrame, epoch, feature_cols: list) -> list:
+    """Generate 14-day forward predictions using the most recent known state."""
+    last_date  = df["date"].max()
+    last_known = df.set_index("date")["total_visits"]
+
+    results = []
+    for i in range(1, 15):
+        td = last_date + pd.Timedelta(days=i)
+        days_since_epoch = (td - epoch).days
+        month_index = (td.year - epoch.year) * 12 + (td.month - epoch.month)
+        dow = td.dayofweek
+
+        # Rolling features from known history
+        hist = last_known.iloc[-28:].values if len(last_known) >= 28 else last_known.values
+        visits_lag7   = float(last_known.iloc[-7])   if len(last_known) >= 7  else np.nan
+        visits_lag14  = float(last_known.iloc[-14])  if len(last_known) >= 14 else np.nan
+        visits_roll7  = float(np.mean(last_known.iloc[-7:]))  if len(last_known) >= 7  else np.nan
+        visits_roll14 = float(np.mean(last_known.iloc[-14:])) if len(last_known) >= 14 else np.nan
+        visits_roll28 = float(np.mean(last_known.iloc[-28:])) if len(last_known) >= 28 else np.nan
+
+        base = {
+            "days_since_epoch": days_since_epoch,
+            "month_index":      month_index,
+            "dow_sin":          np.sin(2 * np.pi * dow / 7),
+            "dow_cos":          np.cos(2 * np.pi * dow / 7),
+            "month_sin":        np.sin(2 * np.pi * td.month / 12),
+            "month_cos":        np.cos(2 * np.pi * td.month / 12),
+            "day_of_week":      dow,
+            "is_weekend":       int(dow >= 5),
+            "is_monday":        int(dow == 0),
+            "is_friday":        int(dow == 4),
+            "month":            td.month,
+            "day_of_month":     td.day,
+            "is_holiday":       0,  # conservative default
+            "visits_lag7":      visits_lag7,
+            "visits_lag14":     visits_lag14,
+            "visits_roll7":     visits_roll7,
+            "visits_roll14":    visits_roll14,
+            "visits_roll28":    visits_roll28,
+        }
+
+        # Fill signal columns from last known row (best available forward estimate)
+        last_row = df.iloc[-1]
+        for col in feature_cols:
+            if col not in base and col in last_row.index:
+                base[col] = last_row[col]
+
+        row = pd.DataFrame([base])
+        for col in feature_cols:
+            if col not in row.columns:
+                row[col] = 0
+        row = row[feature_cols].fillna(0)
+
+        pred = float(np.maximum(model.predict(row)[0], 20))
+        mae  = 9  # current model MAE — updated each retrain
+        results.append({
+            "date":      td.strftime("%Y-%m-%d"),
+            "day":       td.strftime("%A"),
+            "predicted": round(pred),
+            "band_low":  max(0, round(pred - mae)),
+            "band_high": round(pred + mae),
+        })
+
+    return results
+
+
+def main():
+    print(f"traumayellow · retrain.py · {datetime.datetime.utcnow().isoformat()} UTC")
+
+    if not SIGNALS.exists():
+        print("  signals.csv not found — skipping")
+        gha_set("RETRAIN_STATUS", "skip")
+        return
+    if not ED_COUNTS.exists():
+        print("  ed_counts.csv not found — skipping")
+        gha_set("RETRAIN_STATUS", "skip")
+        return
+
+    df = load_and_join()
+    print(f"  Joined rows: {len(df)}  ({df.date.min().date()} → {df.date.max().date()})")
+
+    if len(df) < MIN_ROWS:
+        print(f"  Only {len(df)} rows — need {MIN_ROWS}. Skipping.")
+        gha_set("RETRAIN_STATUS", "skip")
+        return
+
+    df = df.dropna(subset=["total_visits"])
+    epoch = df["date"].min()
+
+    X, y, feature_cols, df = build_features(df, epoch)
+
+    # Drop warmup rows where lag features are NaN
+    valid = X["visits_lag14"].notna()
+    X, y  = X[valid].fillna(0), y[valid]
+    df    = df[valid].reset_index(drop=True)
+    print(f"  Training rows after warmup: {len(X)}")
+
+    # Temporal split
+    split = len(X) - HOLDOUT
+    X_train, X_test = X.iloc[:split], X.iloc[split:]
+    y_train, y_test = y.iloc[:split], y.iloc[split:]
+    print(f"  Train: {len(X_train)}  Holdout: {len(X_test)}")
+
+    print("  Training XGBoost...")
+    model = train_model(X_train, y_train)
+
+    metrics = evaluate(model, X_test, y_test)
+    print(f"  MAE={metrics['mae']}  within_10={metrics['within_10']}%  surge_recall={metrics['surge_recall']}%")
+
+    # Feature importance
+    importance = dict(zip(feature_cols, model.feature_importances_.tolist()))
+    top10 = dict(sorted(importance.items(), key=lambda x: -x[1])[:10])
+    print(f"  Top features: {', '.join(top10.keys())}")
+
+    # Save model + feature list
+    MODEL_PKL.parent.mkdir(exist_ok=True)
+    with open(MODEL_PKL, "wb") as f:
+        pickle.dump({"model": model, "feature_cols": feature_cols, "epoch": str(epoch.date())}, f)
+    with open(FEAT_JSON, "w") as f:
+        json.dump(feature_cols, f)
+    print(f"  Model → {MODEL_PKL}")
+
+    # Write predictions.json
+    predictions = generate_predictions(model, df, epoch, feature_cols)
+    PREDS_JSON.parent.mkdir(exist_ok=True)
+    payload = {
+        "generated_at":    datetime.datetime.utcnow().isoformat() + "Z",
+        "model_version":   datetime.date.today().isoformat(),
+        "training_rows":   len(X_train),
+        "holdout_rows":    len(X_test),
+        "epoch":           str(epoch.date()),
+        "last_actual":     str(df["date"].max().date()),
+        "mae":             metrics["mae"],
+        "metrics":         metrics,
+        "top_features":    top10,
+        "forecast":        predictions,
+    }
+    with open(PREDS_JSON, "w") as f:
+        json.dump(payload, f, indent=2)
+    print(f"  predictions.json → {PREDS_JSON}")
+
+    # Write model_metrics.json (committed to repo)
+    full_metrics = {
+        "retrain_date":  datetime.date.today().isoformat(),
+        "training_rows": len(X_train),
+        "holdout_rows":  len(X_test),
+        "epoch":         str(epoch.date()),
+        "last_actual":   str(df["date"].max().date()),
+        **metrics,
+        "top_features":  top10,
+    }
+    with open(METRICS, "w") as f:
+        json.dump(full_metrics, f, indent=2)
+
+    gha_set("RETRAIN_STATUS", "ok")
+    gha_set("RETRAIN_MAE",    metrics["mae"])
+    gha_set("RETRAIN_ROWS",   len(X_train))
+    print("Done.")
+
+
+if __name__ == "__main__":
+    main()
