@@ -52,4 +52,4 @@ jobs:
           git config user.email "bot@traumayellow.com"
           git add data/signals.csv
           git diff --cached --quiet || git commit -m "data: signals $(date -u +%Y-%m-%d)"
-          git push
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:main
