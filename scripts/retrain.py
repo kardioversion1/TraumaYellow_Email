@@ -52,10 +52,20 @@ def gha_set(key, value):
 
 
 def load_and_join() -> pd.DataFrame:
-    signals   = pd.read_csv(SIGNALS,   parse_dates=["date"])
     ed_counts = pd.read_csv(ED_COUNTS, parse_dates=["date"])
-    df = ed_counts.merge(signals, on="date", how="inner")
-    df = df.sort_values("date").reset_index(drop=True)
+    ed_counts = ed_counts.sort_values("date").reset_index(drop=True)
+    # Merge signals if available and non-empty
+    if SIGNALS.exists():
+        signals = pd.read_csv(SIGNALS, parse_dates=["date"])
+        if len(signals) > 0:
+            df = ed_counts.merge(signals, on="date", how="left")
+            print(f"  Signals joined: {signals['date'].nunique()} signal days merged (left join)")
+        else:
+            df = ed_counts
+            print("  signals.csv empty — training on ed_counts + engineered features only")
+    else:
+        df = ed_counts
+        print("  No signals.csv — training on ed_counts + engineered features only")
     return df
 
 
@@ -223,10 +233,6 @@ def generate_predictions(model, df: pd.DataFrame, epoch, feature_cols: list) -> 
 def main():
     print(f"traumayellow · retrain.py · {datetime.datetime.utcnow().isoformat()} UTC")
 
-    if not SIGNALS.exists():
-        print("  signals.csv not found — skipping")
-        gha_set("RETRAIN_STATUS", "skip")
-        return
     if not ED_COUNTS.exists():
         print("  ed_counts.csv not found — skipping")
         gha_set("RETRAIN_STATUS", "skip")
