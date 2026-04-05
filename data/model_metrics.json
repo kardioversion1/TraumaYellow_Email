@@ -1,0 +1,22 @@
+{
+  "retrain_date": "2026-04-05",
+  "training_rows": 598,
+  "holdout_rows": 14,
+  "epoch": "2024-07-01",
+  "last_actual": "2026-03-18",
+  "mae": 22.12,
+  "within_10": 7.1,
+  "surge_recall": 100.0,
+  "top_features": {
+    "month_index": 0.6670344471931458,
+    "is_weekend": 0.09838598966598511,
+    "days_since_epoch": 0.06411626189947128,
+    "dow_sin": 0.02854534052312374,
+    "visits_roll7": 0.02694229781627655,
+    "is_monday": 0.01739022321999073,
+    "visits_lag14": 0.012296658009290695,
+    "month_sin": 0.011958389542996883,
+    "visits_roll14": 0.011397740803658962,
+    "dow_cos": 0.010344156064093113
+  }
+}

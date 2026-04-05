@@ -1,0 +1,1 @@
+["days_since_epoch", "month_index", "dow_sin", "dow_cos", "month_sin", "month_cos", "is_weekend", "is_monday", "is_friday", "month", "day_of_month", "visits_lag7", "visits_lag14", "visits_roll7", "visits_roll14", "visits_roll28"]
