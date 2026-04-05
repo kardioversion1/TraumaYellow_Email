@@ -1,0 +1,9 @@
+{
+  "generated_at": "2026-04-05T02:27:41.345634Z",
+  "model_version": "pending-first-retrain",
+  "training_rows": 0,
+  "mae": 9,
+  "last_actual": "2026-03-18",
+  "forecast": [],
+  "note": "Predictions will populate after first retrain workflow runs."
+}
