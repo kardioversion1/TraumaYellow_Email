@@ -2,11 +2,8 @@ name: Daily ED Prediction Email
 
 on:
   schedule:
-    # 11:00 UTC = 6:00 AM ET (EST) / 7:00 AM ET (EDT)
-    # Note: GitHub Actions cron runs in UTC. Eastern is UTC-5 (EST) / UTC-4 (EDT).
-    # Use 11:00 UTC to hit ~6 AM year-round (may shift 1hr during DST transitions).
+    # 06:00 AM ET = 11:00 UTC
     - cron: '0 11 * * *'
-  # Manual trigger for testing — run from the Actions tab without waiting for cron
   workflow_dispatch:
 
 jobs:
@@ -14,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up Python
@@ -22,18 +19,14 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Cache pip dependencies
+      - name: Cache pip
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-email-${{ hashFiles('requirements-email.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-email-
+          key: ${{ runner.os }}-pip-email-${{ hashFiles('requirements.txt') }}
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements-email.txt
+        run: pip install requests
 
       - name: Send prediction email
         env:
