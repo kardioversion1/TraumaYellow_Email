@@ -3,7 +3,7 @@ name: Daily ED Prediction Email
 on:
   schedule:
     # 06:00 AM ET = 11:00 UTC
-    - cron: '0 11 * * *'
+    - cron: '30 11 * * *'  # 06:30 ET — 30min after collect, avoids race condition
   workflow_dispatch:
 
 jobs:
