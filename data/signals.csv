@@ -1,2 +1,1 @@
-date,temp_max_f,temp_min_f,precip_mm,snowfall_mm,wind_max_mph,cloud_cover_pct,aqi_o3,aqi_pm25,aqi_overall,nssp_flu_pct,nssp_covid_pct,nwss_percentile,crime_violent_7d,ems_runs_7d,collisions_7d,is_holiday,day_of_week,event_attendance
-2026-04-04,82.2,53.9,6.3,0,17.8,57,,,,,,,,,,0,5,
+date,temp_max_f,temp_min_f,precip_mm,snowfall_mm,wind_max_mph,cloud_cover_pct,temp_7d_mean,temp_delta,temp_surge_flag,aqi_pm25,aqi_o3_ugm3,aqi_o3,aqi_pm25_airnow,aqi_overall,aqi_o3_lag3,aqi_o3_lag4,aqi_o3_lag5,nssp_flu_pct,nssp_covid_pct,nwss_percentile,crime_violent_7d,row_permits_catchment,is_holiday,day_of_week,event_attendance
