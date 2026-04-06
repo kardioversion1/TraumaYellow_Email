@@ -330,6 +330,17 @@ HOLIDAYS = {
     datetime.date(2026, 7, 3), datetime.date(2026, 9, 7),
     datetime.date(2026, 11, 11), datetime.date(2026, 11, 26),
     datetime.date(2026, 12, 25),
+    # Kentucky Derby week — ED volume suppressed on race day, elevated Fri (Oaks)
+    # Derby = first Saturday in May; Oaks = Friday before
+    datetime.date(2024, 5, 3),   # Derby 2024
+    datetime.date(2024, 5, 4),   # Oaks 2024 (day after, residual)
+    datetime.date(2024, 4, 26),  # Thunder Over Louisville 2024
+    datetime.date(2025, 5, 2),   # Derby 2025
+    datetime.date(2025, 5, 3),   # Oaks 2025
+    datetime.date(2025, 4, 26),  # Thunder Over Louisville 2025
+    datetime.date(2026, 5, 1),   # Derby 2026
+    datetime.date(2026, 5, 2),   # Oaks 2026
+    datetime.date(2026, 4, 25),  # Thunder Over Louisville 2026
 }
 
 
