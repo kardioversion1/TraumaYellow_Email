@@ -88,6 +88,7 @@ def build_features(df: pd.DataFrame, epoch: pd.Timestamp):
     df["month_cos"] = np.cos(2 * np.pi * df["date"].dt.month / 12)
 
     # Calendar flags
+    df["day_of_week"]  = df["date"].dt.dayofweek          # 0=Mon…6=Sun (also in FEATURE_COLS)
     df["is_weekend"]   = (df["date"].dt.dayofweek >= 5).astype(int)
     df["is_monday"]    = (df["date"].dt.dayofweek == 0).astype(int)
     df["is_friday"]    = (df["date"].dt.dayofweek == 4).astype(int)
