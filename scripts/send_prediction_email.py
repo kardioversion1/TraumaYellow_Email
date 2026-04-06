@@ -56,7 +56,14 @@ def alert_style(alert: str):
 
 
 def build_html(payload: dict, generated_at: str) -> str:
-    forecast      = payload.get("forecast", [])[:3]
+    # Filter to future dates only, take next 3
+    today = datetime.date.today()
+    all_forecast = payload.get("forecast", [])
+    forecast = [p for p in all_forecast
+                if datetime.date.fromisoformat(p["date"]) > today][:3]
+    # Fallback: if all dates are past (stale predictions.json), use last 3
+    if not forecast:
+        forecast = all_forecast[-3:]
     model_ver     = payload.get("model_version", "unknown")
     last_actual   = payload.get("last_actual", "unknown")
     mae           = payload.get("mae", 9)
@@ -233,6 +240,10 @@ def main():
         print("No forecast data — aborting", file=sys.stderr)
         sys.exit(1)
 
+    today_date = datetime.date.today()
+    all_fc     = payload.get("forecast", [])
+    future_fc  = [p for p in all_fc if datetime.date.fromisoformat(p["date"]) > today_date]
+    forecast   = future_fc if future_fc else all_fc[-3:]
     p0         = forecast[0]
     today_str  = datetime.date.today().strftime("%A, %B %-d, %Y")
     now_str    = datetime.datetime.now().strftime("%b %-d %Y %I:%M %p ET")
