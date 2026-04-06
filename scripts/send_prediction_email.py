@@ -2,17 +2,13 @@
 """
 traumayellow · send_prediction_email.py
 Fetches predictions.json from GitHub Pages and sends a formatted HTML
-forecast email. No model loading — all prediction logic lives in retrain.py.
+forecast email with Z-score surge alerting.
 
 Runs daily at 6 AM ET via GitHub Actions.
 
 Required GitHub Secrets:
   GMAIL_APP_PW   - 16-char Gmail app password (no spaces)
   RECIPIENT      - destination email address
-
-Hardcoded:
-  GMAIL_USER     - evan.kuhl@gmail.com
-  PREDICTIONS_URL - GitHub Pages predictions.json URL
 """
 
 import os
@@ -25,15 +21,12 @@ import urllib.request
 from email.message import EmailMessage
 from email.policy import SMTP
 
-# ── Config ────────────────────────────────────────────────────────────────────
-GMAIL_USER       = "evan.kuhl@gmail.com"
-GMAIL_APP_PW     = os.environ["GMAIL_APP_PW"]
-RECIPIENT        = os.environ.get("RECIPIENT", "evan.kuhl@uoflhealth.org")
-PREDICTIONS_URL  = "https://kardioversion1.github.io/TraumaYellow_Email/predictions.json"
-MODEL_MAE        = 9   # fallback if not in payload
+GMAIL_USER      = "evan.kuhl@gmail.com"
+GMAIL_APP_PW    = os.environ["GMAIL_APP_PW"]
+RECIPIENT       = os.environ.get("RECIPIENT", "evan.kuhl@uoflhealth.org")
+PREDICTIONS_URL = "https://kardioversion1.github.io/TraumaYellow_Email/predictions.json"
 
 
-# ── Fetch predictions ─────────────────────────────────────────────────────────
 def fetch_predictions() -> dict:
     req = urllib.request.Request(
         PREDICTIONS_URL,
@@ -43,7 +36,6 @@ def fetch_predictions() -> dict:
         return json.loads(r.read())
 
 
-# ── Rendering ─────────────────────────────────────────────────────────────────
 def volume_tier(visits: int):
     if visits >= 70:
         return "#c0392b", "HIGH"
@@ -55,33 +47,70 @@ def volume_tier(visits: int):
         return "#27ae60", "LOW"
 
 
+def alert_style(alert: str):
+    if alert == "RED":
+        return "#c0392b", "🔴 RED ALERT"
+    elif alert == "YELLOW":
+        return "#e67e22", "⚡ YELLOW ALERT"
+    return None, None
+
+
 def build_html(payload: dict, generated_at: str) -> str:
-    forecast     = payload.get("forecast", [])[:3]   # next 3 days only
-    model_ver    = payload.get("model_version", "unknown")
-    last_actual  = payload.get("last_actual", "unknown")
-    mae          = payload.get("mae", MODEL_MAE)
-    training_rows= payload.get("training_rows", "?")
+    forecast      = payload.get("forecast", [])[:3]
+    model_ver     = payload.get("model_version", "unknown")
+    last_actual   = payload.get("last_actual", "unknown")
+    mae           = payload.get("mae", 9)
+    training_rows = payload.get("training_rows", "?")
+    top_alert     = payload.get("top_alert")
+
+    # Alert banner (shown when any of next 3 days is flagged)
+    alert_banner = ""
+    if top_alert:
+        a_color, a_label = alert_style(top_alert)
+        alert_banner = f"""
+        <tr>
+          <td colspan="4" style="background:{a_color}; padding:12px 28px; text-align:center;">
+            <span style="color:#fff; font-size:15px; font-weight:700; letter-spacing:1px;">
+              {a_label} — Statistically unusual volume predicted in next 3 days
+            </span>
+          </td>
+        </tr>"""
 
     rows = ""
     for p in forecast:
         visits = p["predicted"]
         lo     = p.get("band_low",  max(0, visits - int(mae)))
         hi     = p.get("band_high", visits + int(mae))
+        z      = p.get("z_score", 0)
+        dow_m  = p.get("dow_mean", "?")
+        alert  = p.get("alert")
         color, tier = volume_tier(visits)
         label  = f"{p['day']} {p['date']}"
 
+        # Z-score badge
+        z_color = "#c0392b" if z >= 2.33 else ("#e67e22" if z >= 1.65 else "#888")
+        z_badge = f'<span style="font-size:10px; color:{z_color}; font-weight:600;">Z={z:+.2f}</span>'
+
+        # Alert indicator on row
+        row_bg = f"background:#fff8f0;" if alert == "YELLOW" else ("background:#fff5f5;" if alert == "RED" else "")
+
         rows += f"""
-        <tr>
+        <tr style="{row_bg}">
           <td style="padding:14px 18px; font-size:15px; font-weight:600;
                      border-bottom:1px solid #f0f0f0; white-space:nowrap;">{label}</td>
           <td style="padding:14px 18px; text-align:center; border-bottom:1px solid #f0f0f0;">
             <span style="font-size:30px; font-weight:700; color:{color};">{visits}</span>
             <br><span style="font-size:11px; color:#999;">({lo}&ndash;{hi} range)</span>
+            <br>{z_badge}
           </td>
           <td style="padding:14px 18px; text-align:center; border-bottom:1px solid #f0f0f0;">
             <span style="display:inline-block; background:{color}; color:#fff;
                          font-size:11px; font-weight:700; padding:3px 9px;
                          border-radius:3px; letter-spacing:.5px;">{tier}</span>
+          </td>
+          <td style="padding:14px 18px; font-size:12px; color:#888;
+                     border-bottom:1px solid #f0f0f0;">
+            DOW avg<br><strong>{dow_m}</strong>
           </td>
         </tr>"""
 
@@ -97,13 +126,13 @@ def build_html(payload: dict, generated_at: str) -> str:
   <table width="100%" cellpadding="0" cellspacing="0"
          style="background:#f5f5f5;padding:24px 0;">
     <tr><td align="center">
-      <table width="580" cellpadding="0" cellspacing="0"
+      <table width="600" cellpadding="0" cellspacing="0"
              style="background:#fff;border-radius:6px;overflow:hidden;
                     box-shadow:0 1px 4px rgba(0,0,0,.08);">
 
         <!-- Header -->
         <tr>
-          <td colspan="3" style="background:#1a1a2e;padding:22px 28px;">
+          <td colspan="4" style="background:#1a1a2e;padding:22px 28px;">
             <span style="color:#f5c518;font-size:20px;font-weight:700;letter-spacing:1px;">
               &#9889; TRAUMAYELLOW
             </span>
@@ -113,13 +142,17 @@ def build_html(payload: dict, generated_at: str) -> str:
           </td>
         </tr>
 
+        <!-- Alert banner (conditional) -->
+        {alert_banner}
+
         <!-- Subheader -->
         <tr>
-          <td colspan="3" style="padding:14px 28px 10px;border-bottom:2px solid #eee;">
+          <td colspan="4" style="padding:14px 28px 10px;border-bottom:2px solid #eee;">
             <span style="font-size:13px;color:#888;">
               {generated_at} &nbsp;&middot;&nbsp; Next 3 days
-              &nbsp;&middot;&nbsp; Model retrained {model_ver}
-              &nbsp;&middot;&nbsp; {training_rows} training rows
+              &nbsp;&middot;&nbsp; Retrained {model_ver}
+              &nbsp;&middot;&nbsp; MAE &plusmn;{int(mae)} &nbsp;&middot;&nbsp;
+              {training_rows} training rows
             </span>
           </td>
         </tr>
@@ -129,19 +162,30 @@ def build_html(payload: dict, generated_at: str) -> str:
           <td style="padding:10px 18px;font-size:11px;color:#aaa;
                      text-transform:uppercase;letter-spacing:.5px;font-weight:600;">Date</td>
           <td style="padding:10px 18px;font-size:11px;color:#aaa;text-align:center;
-                     text-transform:uppercase;letter-spacing:.5px;font-weight:600;">Predicted Visits</td>
+                     text-transform:uppercase;letter-spacing:.5px;font-weight:600;">Predicted</td>
           <td style="padding:10px 18px;font-size:11px;color:#aaa;text-align:center;
                      text-transform:uppercase;letter-spacing:.5px;font-weight:600;">Volume</td>
+          <td style="padding:10px 18px;font-size:11px;color:#aaa;
+                     text-transform:uppercase;letter-spacing:.5px;font-weight:600;">Baseline</td>
         </tr>
 
-        <!-- Rows -->
         {rows}
+
+        <!-- Z-score legend -->
+        <tr>
+          <td colspan="4" style="padding:12px 28px;background:#fafafa;border-top:1px solid #eee;">
+            <span style="font-size:11px;color:#aaa;">
+              Z-score: deviation from day-of-week historical average &nbsp;&middot;&nbsp;
+              <span style="color:#e67e22;font-weight:600;">Z&ge;1.65</span> = Yellow Alert (95th pct)
+              &nbsp; <span style="color:#c0392b;font-weight:600;">Z&ge;2.33</span> = Red Alert (99th pct)
+            </span>
+          </td>
+        </tr>
 
         <!-- Footer -->
         <tr>
-          <td colspan="3" style="padding:16px 28px 22px;border-top:1px solid #f0f0f0;">
+          <td colspan="4" style="padding:14px 28px 22px;border-top:1px solid #f0f0f0;">
             <p style="margin:0;font-size:12px;color:#bbb;line-height:1.7;">
-              Confidence range &plusmn;{int(mae)} visits (MAE) &nbsp;&middot;&nbsp;
               Last actual: {last_actual} &nbsp;&middot;&nbsp;
               <span style="color:#27ae60;font-weight:600;">Low</span> &lt;50 &nbsp;
               <span style="color:#f39c12;font-weight:600;">Moderate</span> 50&ndash;59 &nbsp;
@@ -151,8 +195,7 @@ def build_html(payload: dict, generated_at: str) -> str:
             <p style="margin:6px 0 0;font-size:12px;color:#bbb;">
               <a href="https://traumayellow.com"
                  style="color:#f5c518;text-decoration:none;">traumayellow.com</a>
-              &nbsp;&middot;&nbsp; XGBoost &nbsp;&middot;&nbsp;
-              Training data Jul 2024&ndash;present
+              &nbsp;&middot;&nbsp; XGBoost &nbsp;&middot;&nbsp; Jul 2024&ndash;present
             </p>
           </td>
         </tr>
@@ -164,7 +207,6 @@ def build_html(payload: dict, generated_at: str) -> str:
 </html>"""
 
 
-# ── Send ───────────────────────────────────────────────────────────────────────
 def send_email(subject: str, html_body: str) -> None:
     msg = EmailMessage(policy=SMTP)
     msg["Subject"] = subject
@@ -182,25 +224,33 @@ def send_email(subject: str, html_body: str) -> None:
     print(f"  Sent → {RECIPIENT}")
 
 
-# ── Main ───────────────────────────────────────────────────────────────────────
 def main():
     print("Fetching predictions.json...")
     payload = fetch_predictions()
 
     forecast = payload.get("forecast", [])
     if not forecast:
-        print("No forecast data in payload — aborting", file=sys.stderr)
+        print("No forecast data — aborting", file=sys.stderr)
         sys.exit(1)
 
-    p0        = forecast[0]
-    today_str = datetime.date.today().strftime("%A, %B %-d, %Y")
-    now_str   = datetime.datetime.now().strftime("%b %-d %Y %I:%M %p ET")
-    subject   = (
-        f"ED Forecast {today_str}: "
-        f"{p0['day']} → {p0['predicted']} visits predicted"
+    p0         = forecast[0]
+    today_str  = datetime.date.today().strftime("%A, %B %-d, %Y")
+    now_str    = datetime.datetime.now().strftime("%b %-d %Y %I:%M %p ET")
+    top_alert  = payload.get("top_alert")
+
+    # Alert prefix in subject
+    alert_prefix = ""
+    if top_alert == "RED":
+        alert_prefix = "🔴 RED ALERT · "
+    elif top_alert == "YELLOW":
+        alert_prefix = "⚡ YELLOW · "
+
+    subject = (
+        f"{alert_prefix}ED Forecast {today_str}: "
+        f"{p0['day']} → {p0['predicted']} visits"
     )
 
-    print("Building email...")
+    print(f"Building email (top_alert={top_alert})...")
     html = build_html(payload, now_str)
 
     print("Sending...")
