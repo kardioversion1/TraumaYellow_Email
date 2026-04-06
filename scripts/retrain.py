@@ -216,13 +216,24 @@ def evaluate(model, X_test, y_test) -> dict:
 
 def generate_predictions(model, df: pd.DataFrame, epoch, feature_cols: list,
                           dow_baselines: dict, mae: float) -> list:
-    """Generate 14-day forward predictions with Z-score surge alerting."""
+    """Generate predictions covering today+1 through today+14.
+    If last_actual is in the past, we extend the window so the forecast
+    always contains future dates relative to when the email runs."""
     last_date  = df["date"].max()
     last_known = df.set_index("date")["total_visits"]
 
+    # Ensure forecast always reaches at least today+14 from today, not from last_actual
+    today = pd.Timestamp.now().normalize()
+    # Start from last_actual+1 but generate enough days to cover today+14
+    days_since_last = max(0, (today - last_date).days)
+    n_days = max(14, days_since_last + 14)  # enough to cover today+14
+
     results = []
-    for i in range(1, 15):
+    for i in range(1, n_days + 1):
         td = last_date + pd.Timedelta(days=i)
+        # Only include dates from today onwards (skip stale past predictions)
+        if td < today:
+            continue
         days_since_epoch = (td - epoch).days
         month_index = (td.year - epoch.year) * 12 + (td.month - epoch.month)
         dow = td.dayofweek
@@ -296,6 +307,8 @@ def generate_predictions(model, df: pd.DataFrame, epoch, feature_cols: list,
             "dow_mean":  round(dow_mean, 1),
             "alert":     alert,
         })
+        if len(results) >= 14:
+            break
 
     return results
 
