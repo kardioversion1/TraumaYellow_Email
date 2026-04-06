@@ -115,7 +115,8 @@ def build_features(df: pd.DataFrame, epoch: pd.Timestamp):
     # ── Ozone lag WMA (respiratory lag signal) ────────────────────────────────
     # High O3 causes lung inflammation peaking in ED visits 3-5 days after exposure.
     # Weighted moving average: weight 3 on lag-3, 2 on lag-4, 1 on lag-5 (total=6).
-    if "aqi_o3" in df.columns:
+    o3_col = "aqi_o3_ugm3" if "aqi_o3_ugm3" in df.columns else "aqi_o3"
+    if o3_col in df.columns:
         o3 = df["aqi_o3"].fillna(method="ffill")
         df["aqi_o3_lag3"] = o3.shift(3)
         df["aqi_o3_lag4"] = o3.shift(4)
@@ -139,16 +140,18 @@ def build_features(df: pd.DataFrame, epoch: pd.Timestamp):
         # weather
         "temp_max_f", "temp_min_f", "precip_mm", "snowfall_mm",
         "wind_max_mph", "cloud_cover_pct",
-        # temperature delta (behavioral surge)
+        # temperature delta (behavioral surge signal)
         "temp_delta", "temp_surge_flag",
-        # air quality
-        "aqi_o3", "aqi_pm25", "aqi_overall",
-        # ozone WMA (respiratory lag)
+        # air quality — Open-Meteo AQ (primary, full history)
+        "aqi_pm25", "aqi_o3_ugm3",
+        # air quality — AirNow EPA (current obs supplement)
+        "aqi_o3", "aqi_pm25_airnow", "aqi_overall",
+        # ozone WMA respiratory lag (3-5 day weighted avg)
         "aqi_o3_wma",
         # disease surveillance
         "nssp_flu_pct", "nssp_covid_pct", "nwss_percentile",
-        # community signals
-        "crime_violent_7d", "ems_runs_7d", "collisions_7d",
+        # community signals (verified LOJIC endpoints)
+        "crime_violent_7d", "row_permits_catchment",
         # events
         "event_attendance",
         # autoregressive
