@@ -70,11 +70,11 @@ def load_and_join() -> pd.DataFrame:
 
 
 def build_features(df: pd.DataFrame, epoch: pd.Timestamp):
-    """Engineer features. Must match what send_prediction_email.py sends in requests.
-    Returns X (DataFrame), y (Series), feature_cols (list)."""
+    """Engineer features. Returns X (DataFrame), y (Series), feature_cols (list)."""
+
+    df = df.copy()
 
     # Trend features anchored to training epoch
-    df = df.copy()
     df["days_since_epoch"] = (df["date"] - epoch).dt.days
     df["month_index"] = (
         (df["date"].dt.year  - epoch.year)  * 12
@@ -88,11 +88,11 @@ def build_features(df: pd.DataFrame, epoch: pd.Timestamp):
     df["month_cos"] = np.cos(2 * np.pi * df["date"].dt.month / 12)
 
     # Calendar flags
-    df["is_weekend"]  = (df["date"].dt.dayofweek >= 5).astype(int)
-    df["is_monday"]   = (df["date"].dt.dayofweek == 0).astype(int)
-    df["is_friday"]   = (df["date"].dt.dayofweek == 4).astype(int)
-    df["month"]       = df["date"].dt.month
-    df["day_of_month"]= df["date"].dt.day
+    df["is_weekend"]   = (df["date"].dt.dayofweek >= 5).astype(int)
+    df["is_monday"]    = (df["date"].dt.dayofweek == 0).astype(int)
+    df["is_friday"]    = (df["date"].dt.dayofweek == 4).astype(int)
+    df["month"]        = df["date"].dt.month
+    df["day_of_month"] = df["date"].dt.day
 
     # Autoregressive lag features (shift to avoid leakage)
     df["visits_lag7"]   = df["total_visits"].shift(7)
@@ -100,6 +100,33 @@ def build_features(df: pd.DataFrame, epoch: pd.Timestamp):
     df["visits_roll7"]  = df["total_visits"].shift(1).rolling(7).mean()
     df["visits_roll14"] = df["total_visits"].shift(1).rolling(14).mean()
     df["visits_roll28"] = df["total_visits"].shift(1).rolling(28).mean()
+
+    # ── Temperature delta (behavioral surge signal) ───────────────────────────
+    # Sudden warmth drives trauma/behavioral visits more than absolute temperature.
+    # Computed as today's max temp minus the 7-day rolling mean of max temp.
+    if "temp_max_f" in df.columns:
+        df["temp_7d_mean"]     = df["temp_max_f"].rolling(7, min_periods=1).mean()
+        df["temp_delta"]       = df["temp_max_f"] - df["temp_7d_mean"]
+        df["temp_surge_flag"]  = (df["temp_delta"] > 15).astype(int)
+    else:
+        df["temp_delta"]      = 0.0
+        df["temp_surge_flag"] = 0
+
+    # ── Ozone lag WMA (respiratory lag signal) ────────────────────────────────
+    # High O3 causes lung inflammation peaking in ED visits 3-5 days after exposure.
+    # Weighted moving average: weight 3 on lag-3, 2 on lag-4, 1 on lag-5 (total=6).
+    if "aqi_o3" in df.columns:
+        o3 = df["aqi_o3"].fillna(method="ffill")
+        df["aqi_o3_lag3"] = o3.shift(3)
+        df["aqi_o3_lag4"] = o3.shift(4)
+        df["aqi_o3_lag5"] = o3.shift(5)
+        df["aqi_o3_wma"]  = (
+            3 * df["aqi_o3_lag3"].fillna(0) +
+            2 * df["aqi_o3_lag4"].fillna(0) +
+            1 * df["aqi_o3_lag5"].fillna(0)
+        ) / 6.0
+    else:
+        df["aqi_o3_wma"] = 0.0
 
     FEATURE_COLS = [
         # trend
@@ -112,8 +139,12 @@ def build_features(df: pd.DataFrame, epoch: pd.Timestamp):
         # weather
         "temp_max_f", "temp_min_f", "precip_mm", "snowfall_mm",
         "wind_max_mph", "cloud_cover_pct",
+        # temperature delta (behavioral surge)
+        "temp_delta", "temp_surge_flag",
         # air quality
         "aqi_o3", "aqi_pm25", "aqi_overall",
+        # ozone WMA (respiratory lag)
+        "aqi_o3_wma",
         # disease surveillance
         "nssp_flu_pct", "nssp_covid_pct", "nwss_percentile",
         # community signals
@@ -130,6 +161,25 @@ def build_features(df: pd.DataFrame, epoch: pd.Timestamp):
     X = df[feature_cols].copy()
     y = df["total_visits"].copy()
     return X, y, feature_cols, df
+
+
+def compute_dow_baselines(df: pd.DataFrame) -> dict:
+    """
+    Compute per-day-of-week mean and std from training data.
+    Used downstream to calculate Z-scores for surge alerting.
+    Returns dict: {0: {mean, std}, 1: {mean, std}, ..., 6: {mean, std}}
+    """
+    df = df.copy()
+    df["dow"] = df["date"].dt.dayofweek
+    baselines = {}
+    for dow in range(7):
+        subset = df[df["dow"] == dow]["total_visits"]
+        baselines[str(dow)] = {
+            "mean": round(float(subset.mean()), 2),
+            "std":  round(float(subset.std()),  2),
+            "n":    int(len(subset)),
+        }
+    return baselines
 
 
 def train_model(X_train, y_train) -> XGBRegressor:
@@ -164,8 +214,9 @@ def evaluate(model, X_test, y_test) -> dict:
     }
 
 
-def generate_predictions(model, df: pd.DataFrame, epoch, feature_cols: list) -> list:
-    """Generate 14-day forward predictions using the most recent known state."""
+def generate_predictions(model, df: pd.DataFrame, epoch, feature_cols: list,
+                          dow_baselines: dict, mae: float) -> list:
+    """Generate 14-day forward predictions with Z-score surge alerting."""
     last_date  = df["date"].max()
     last_known = df.set_index("date")["total_visits"]
 
@@ -176,8 +227,6 @@ def generate_predictions(model, df: pd.DataFrame, epoch, feature_cols: list) -> 
         month_index = (td.year - epoch.year) * 12 + (td.month - epoch.month)
         dow = td.dayofweek
 
-        # Rolling features from known history
-        hist = last_known.iloc[-28:].values if len(last_known) >= 28 else last_known.values
         visits_lag7   = float(last_known.iloc[-7])   if len(last_known) >= 7  else np.nan
         visits_lag14  = float(last_known.iloc[-14])  if len(last_known) >= 14 else np.nan
         visits_roll7  = float(np.mean(last_known.iloc[-7:]))  if len(last_known) >= 7  else np.nan
@@ -197,7 +246,10 @@ def generate_predictions(model, df: pd.DataFrame, epoch, feature_cols: list) -> 
             "is_friday":        int(dow == 4),
             "month":            td.month,
             "day_of_month":     td.day,
-            "is_holiday":       0,  # conservative default
+            "is_holiday":       0,
+            "temp_delta":       0.0,   # conservative — no future weather yet
+            "temp_surge_flag":  0,
+            "aqi_o3_wma":       0.0,
             "visits_lag7":      visits_lag7,
             "visits_lag14":     visits_lag14,
             "visits_roll7":     visits_roll7,
@@ -205,7 +257,7 @@ def generate_predictions(model, df: pd.DataFrame, epoch, feature_cols: list) -> 
             "visits_roll28":    visits_roll28,
         }
 
-        # Fill signal columns from last known row (best available forward estimate)
+        # Fill remaining signal columns from last known row
         last_row = df.iloc[-1]
         for col in feature_cols:
             if col not in base and col in last_row.index:
@@ -218,13 +270,31 @@ def generate_predictions(model, df: pd.DataFrame, epoch, feature_cols: list) -> 
         row = row[feature_cols].fillna(0)
 
         pred = float(np.maximum(model.predict(row)[0], 20))
-        mae  = 9  # current model MAE — updated each retrain
+        pred_rounded = round(pred)
+
+        # ── Z-score surge alert ───────────────────────────────────────────────
+        dow_key = str(dow)
+        dow_mean = dow_baselines[dow_key]["mean"]
+        dow_std  = dow_baselines[dow_key]["std"]
+        z_score  = round((pred - dow_mean) / dow_std, 2) if dow_std > 0 else 0.0
+
+        # Alert tiers: Yellow ≥ 1.65 (95th pct), Red ≥ 2.33 (99th pct)
+        if z_score >= 2.33:
+            alert = "RED"
+        elif z_score >= 1.65:
+            alert = "YELLOW"
+        else:
+            alert = None
+
         results.append({
             "date":      td.strftime("%Y-%m-%d"),
             "day":       td.strftime("%A"),
-            "predicted": round(pred),
+            "predicted": pred_rounded,
             "band_low":  max(0, round(pred - mae)),
             "band_high": round(pred + mae),
+            "z_score":   z_score,
+            "dow_mean":  round(dow_mean, 1),
+            "alert":     alert,
         })
 
     return results
@@ -257,6 +327,10 @@ def main():
     df    = df[valid].reset_index(drop=True)
     print(f"  Training rows after warmup: {len(X)}")
 
+    # Compute DOW baselines from full dataset (before train/test split)
+    dow_baselines = compute_dow_baselines(df)
+    print(f"  DOW baselines: Mon={dow_baselines['0']['mean']:.1f} Fri={dow_baselines['4']['mean']:.1f} Sat={dow_baselines['5']['mean']:.1f}")
+
     # Temporal split
     split = len(X) - HOLDOUT
     X_train, X_test = X.iloc[:split], X.iloc[split:]
@@ -283,7 +357,13 @@ def main():
     print(f"  Model → {MODEL_PKL}")
 
     # Write predictions.json
-    predictions = generate_predictions(model, df, epoch, feature_cols)
+    predictions = generate_predictions(model, df, epoch, feature_cols,
+                                        dow_baselines, metrics["mae"])
+
+    # Summary alert for the next 3 days
+    alerts_3day = [p["alert"] for p in predictions[:3] if p["alert"]]
+    top_alert = "RED" if "RED" in alerts_3day else ("YELLOW" if "YELLOW" in alerts_3day else None)
+
     PREDS_JSON.parent.mkdir(exist_ok=True)
     payload = {
         "generated_at":    datetime.datetime.utcnow().isoformat() + "Z",
@@ -295,13 +375,15 @@ def main():
         "mae":             metrics["mae"],
         "metrics":         metrics,
         "top_features":    top10,
+        "dow_baselines":   dow_baselines,
+        "top_alert":       top_alert,
         "forecast":        predictions,
     }
     with open(PREDS_JSON, "w") as f:
         json.dump(payload, f, indent=2)
-    print(f"  predictions.json → {PREDS_JSON}")
+    print(f"  predictions.json → {PREDS_JSON}  (top_alert={top_alert})")
 
-    # Write model_metrics.json (committed to repo)
+    # Write model_metrics.json
     full_metrics = {
         "retrain_date":  datetime.date.today().isoformat(),
         "training_rows": len(X_train),
@@ -310,6 +392,7 @@ def main():
         "last_actual":   str(df["date"].max().date()),
         **metrics,
         "top_features":  top10,
+        "dow_baselines": dow_baselines,
     }
     with open(METRICS, "w") as f:
         json.dump(full_metrics, f, indent=2)
