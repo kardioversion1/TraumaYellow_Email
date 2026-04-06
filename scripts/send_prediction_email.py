@@ -55,7 +55,7 @@ def alert_style(alert: str):
     return None, None
 
 
-def build_html(payload: dict, generated_at: str) -> str:
+def build_html(payload: dict, generated_at: str, is_stale: bool = False) -> str:
     # Filter to future dates only, take next 3
     today = datetime.date.today()
     all_forecast = payload.get("forecast", [])
@@ -64,6 +64,10 @@ def build_html(payload: dict, generated_at: str) -> str:
     # Fallback: if all dates are past (stale predictions.json), use last 3
     if not forecast:
         forecast = all_forecast[-3:]
+
+    # Stale data check — warn if forecast doesn't reach tomorrow
+    first_forecast_date = datetime.date.fromisoformat(forecast[0]["date"]) if forecast else None
+    is_stale = (first_forecast_date is None) or (first_forecast_date > today + datetime.timedelta(days=3))
     model_ver     = payload.get("model_version", "unknown")
     last_actual   = payload.get("last_actual", "unknown")
     mae           = payload.get("mae", 9)
@@ -79,6 +83,17 @@ def build_html(payload: dict, generated_at: str) -> str:
           <td colspan="4" style="background:{a_color}; padding:12px 28px; text-align:center;">
             <span style="color:#fff; font-size:15px; font-weight:700; letter-spacing:1px;">
               {a_label} — Statistically unusual volume predicted in next 3 days
+            </span>
+          </td>
+        </tr>"""
+
+    stale_banner = ""
+    if is_stale:
+        stale_banner = """
+        <tr>
+          <td colspan="4" style="background:#7f1d1d;padding:10px 28px;text-align:center;">
+            <span style="color:#fca5a5;font-size:13px;font-weight:700;">
+              &#9888; WARNING — Forecast data may be stale. Verify before staffing decisions.
             </span>
           </td>
         </tr>"""
@@ -151,6 +166,8 @@ def build_html(payload: dict, generated_at: str) -> str:
 
         <!-- Alert banner (conditional) -->
         {alert_banner}
+        <!-- Stale data warning (conditional) -->
+        {stale_banner}
 
         <!-- Subheader -->
         <tr>
@@ -256,13 +273,15 @@ def main():
     elif top_alert == "YELLOW":
         alert_prefix = "⚡ YELLOW · "
 
+    stale_prefix = "⚠️ STALE DATA · " if is_stale else ""
     subject = (
-        f"{alert_prefix}ED Forecast {today_str}: "
+        f"{stale_prefix}{alert_prefix}ED Forecast {today_str}: "
         f"{p0['day']} → {p0['predicted']} visits"
     )
 
-    print(f"Building email (top_alert={top_alert})...")
-    html = build_html(payload, now_str)
+    is_stale = (first_forecast_date is None) or                (first_forecast_date > today + datetime.timedelta(days=3))
+    print(f"Building email (top_alert={top_alert}, stale={is_stale})...")
+    html = build_html(payload, now_str, is_stale=is_stale)
 
     print("Sending...")
     send_email(subject, html)
