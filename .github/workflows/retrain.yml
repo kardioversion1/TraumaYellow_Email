@@ -43,7 +43,7 @@ jobs:
           git add model/model.pkl model/feature_list.json data/model_metrics.json
           git diff --cached --quiet || git commit -m \
             "model: retrain $(date -u +%Y-%m-%d) · MAE=${{ env.RETRAIN_MAE }} · N=${{ env.RETRAIN_ROWS }} rows"
-          git push
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:main
 
       - name: Deploy predictions.json to GitHub Pages
         if: env.RETRAIN_STATUS == 'ok'
