@@ -2,56 +2,63 @@
 """
 traumayellow · collect_signals.py
 Runs daily at 06:00 ET via GitHub Actions.
-Fetches all environmental/epidemiological signals for TARGET_DATE (yesterday)
-and appends one row to data/signals.csv.
+Fetches all signals for TARGET_DATE (yesterday) and appends to data/signals.csv.
 
-Null-tolerant: if any source fails, that column is written as empty string.
+Null-tolerant: any source failure writes empty string for that column.
 Only hard-fails on file I/O errors.
 
-Required GitHub Secrets:
-  AIRNOW_API_KEY  - EPA AirNow API key
+Sources:
+  Open-Meteo   — weather + air quality (free, no key, full history)
+  LOJIC ArcGIS — crime (per-year FeatureServer, verified working)
+  LOJIC ArcGIS — ROW construction permits (road disruption proxy)
+  CDC NSSP     — flu/COVID ER visit % Kentucky
+  CDC NWSS     — wastewater COVID percentile Jefferson County
+  Ticketmaster — Louisville event attendance
 """
 
-import os
-import sys
-import csv
-import json
-import datetime
-import argparse
-import requests
+import os, sys, csv, datetime, argparse, requests
 from pathlib import Path
 
 ROOT       = Path(__file__).parent.parent
 SIGNALS    = ROOT / "data" / "signals.csv"
-LAT, LON   = 38.2527, -85.7585   # Jewish Hospital Downtown, Louisville KY
-AIRNOW_KEY = os.environ.get("AIRNOW_API_KEY", "")
+LAT, LON   = 38.2527, -85.7585   # Jewish Hospital Downtown
+ORG        = "79kfd2K6fskCAkyg"  # Louisville Metro ArcGIS org (verified)
+LOJIC_BASE = f"https://services1.arcgis.com/{ORG}/arcgis/rest/services"
+
+# Per-year crime service names (verified live, ~1 day lag)
+CRIME_SERVICES = {
+    2024: "crimedata2024",
+    2025: "crime_data_2025",
+    2026: "crime_data_2026",
+}
 
 COLUMNS = [
     "date",
-    # weather (Open-Meteo)
+    # weather
     "temp_max_f", "temp_min_f", "precip_mm", "snowfall_mm",
     "wind_max_mph", "cloud_cover_pct",
-    # temperature delta (behavioral surge signal)
+    # temp delta (behavioral surge signal)
     "temp_7d_mean", "temp_delta", "temp_surge_flag",
-    # air quality (AirNow EPA)
-    "aqi_o3", "aqi_pm25", "aqi_overall",
-    # ozone lag columns (for WMA in retrain)
+    # air quality (Open-Meteo AQ — free, full history)
+    "aqi_pm25", "aqi_o3_ugm3",
+    # AirNow EPA (current obs only — historical API broken)
+    "aqi_o3", "aqi_pm25_airnow", "aqi_overall",
+    # ozone lag columns for WMA respiratory signal
     "aqi_o3_lag3", "aqi_o3_lag4", "aqi_o3_lag5",
-    # CDC NSSP (flu/COVID ER visits %)
+    # CDC NSSP
     "nssp_flu_pct", "nssp_covid_pct",
-    # CDC NWSS (wastewater COVID percentile)
+    # CDC NWSS
     "nwss_percentile",
-    # LOJIC ArcGIS (Louisville crime/EMS/collisions)
-    "crime_violent_7d", "ems_runs_7d", "collisions_7d",
-    # time features
+    # LOJIC community signals
+    "crime_violent_7d", "row_permits_catchment",
+    # time
     "is_holiday", "day_of_week",
-    # event attendance (Ticketmaster)
+    # events
     "event_attendance",
 ]
 
 
 def safe_get(fn, label):
-    """Call fn(), return result or None on any exception."""
     try:
         return fn()
     except Exception as e:
@@ -59,12 +66,16 @@ def safe_get(fn, label):
         return None
 
 
-# ── Weather: Open-Meteo (free, no key) ────────────────────────────────────────
+# ── Weather + Air Quality: Open-Meteo ─────────────────────────────────────────
 def fetch_weather(date: datetime.date) -> dict:
+    """Weather from Open-Meteo forecast/archive API (full historical coverage)."""
     ds = date.isoformat()
+    # Use archive endpoint for past dates, forecast for recent
+    days_ago = (datetime.date.today() - date).days
+    base = "https://archive-api.open-meteo.com/v1/archive" if days_ago > 5 \
+           else "https://api.open-meteo.com/v1/forecast"
     url = (
-        f"https://api.open-meteo.com/v1/forecast"
-        f"?latitude={LAT}&longitude={LON}"
+        f"{base}?latitude={LAT}&longitude={LON}"
         f"&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,"
         f"snowfall_sum,wind_speed_10m_max,cloud_cover_mean"
         f"&temperature_unit=fahrenheit&wind_speed_unit=mph"
@@ -83,99 +94,165 @@ def fetch_weather(date: datetime.date) -> dict:
     }
 
 
-def compute_temp_delta(target: datetime.date, current_temp_max: float) -> dict:
-    """
-    Fetch the past 7 days of temp_max to compute rolling mean and delta.
-    A delta > 15°F flags a behavioral/trauma surge risk.
-    """
+def fetch_air_quality(date: datetime.date) -> dict:
+    """PM2.5 and ozone from Open-Meteo AQ API (free, full history, µg/m³)."""
+    ds = date.isoformat()
+    days_ago = (datetime.date.today() - date).days
+    base = "https://air-quality-api.open-meteo.com/v1/air-quality"
+    url = (
+        f"{base}?latitude={LAT}&longitude={LON}"
+        f"&hourly=pm2_5,ozone"
+        f"&start_date={ds}&end_date={ds}&timezone=America%2FNew_York"
+    )
+    r = requests.get(url, timeout=15)
+    r.raise_for_status()
+    hourly = r.json().get("hourly", {})
+    # Daily max (peak exposure drives health effects)
+    pm25_vals  = [x for x in hourly.get("pm2_5", []) if x is not None]
+    ozone_vals = [x for x in hourly.get("ozone", []) if x is not None]
+    return {
+        "aqi_pm25":    round(max(pm25_vals),  1) if pm25_vals  else None,
+        "aqi_o3_ugm3": round(max(ozone_vals), 1) if ozone_vals else None,
+    }
+
+
+def compute_temp_delta(target: datetime.date, temp_max: float) -> dict:
+    """7-day rolling mean delta — sudden warmth flags behavioral/trauma surge."""
     start = (target - datetime.timedelta(days=7)).isoformat()
     end   = (target - datetime.timedelta(days=1)).isoformat()
+    days_ago = (datetime.date.today() - target).days
+    base = "https://archive-api.open-meteo.com/v1/archive" if days_ago > 5 \
+           else "https://api.open-meteo.com/v1/forecast"
     url = (
-        f"https://api.open-meteo.com/v1/forecast"
-        f"?latitude={LAT}&longitude={LON}"
-        f"&daily=temperature_2m_max"
-        f"&temperature_unit=fahrenheit"
+        f"{base}?latitude={LAT}&longitude={LON}"
+        f"&daily=temperature_2m_max&temperature_unit=fahrenheit"
         f"&start_date={start}&end_date={end}&timezone=America%2FNew_York"
     )
     r = requests.get(url, timeout=15)
     r.raise_for_status()
-    past_temps = r.json()["daily"]["temperature_2m_max"]
-    past_temps = [t for t in past_temps if t is not None]
-    if not past_temps:
+    past = [t for t in r.json()["daily"]["temperature_2m_max"] if t is not None]
+    if not past:
         return {"temp_7d_mean": None, "temp_delta": None, "temp_surge_flag": 0}
-    mean_7d = sum(past_temps) / len(past_temps)
-    delta   = current_temp_max - mean_7d
+    mean_7d = sum(past) / len(past)
+    delta   = temp_max - mean_7d
     return {
         "temp_7d_mean":    round(mean_7d, 1),
-        "temp_delta":      round(delta, 1),
+        "temp_delta":      round(delta,   1),
         "temp_surge_flag": int(delta > 15),
     }
 
 
-# ── Air quality: AirNow EPA ────────────────────────────────────────────────────
-def fetch_airnow(date: datetime.date) -> dict:
-    if not AIRNOW_KEY:
-        raise ValueError("AIRNOW_API_KEY not set")
-    ds = date.strftime("%Y-%m-%dT00")
-    url = (
-        f"https://www.airnowapi.org/aq/observation/latLong/historical/"
-        f"?format=application/json"
-        f"&latitude={LAT}&longitude={LON}"
-        f"&date={ds}&distance=25&API_KEY={AIRNOW_KEY}"
+# ── AirNow EPA (current obs only — historical endpoint broken) ─────────────────
+def fetch_airnow_current() -> dict:
+    """AirNow current observations — only valid for today's collection run."""
+    key = os.environ.get("AIRNOW_API_KEY", "")
+    if not key:
+        return {}
+    r = requests.get(
+        f"https://www.airnowapi.org/aq/observation/latLong/current/"
+        f"?format=application/json&latitude={LAT}&longitude={LON}"
+        f"&distance=25&API_KEY={key}",
+        timeout=15
     )
-    r = requests.get(url, timeout=15)
     r.raise_for_status()
     data = r.json()
-    result = {"aqi_o3": None, "aqi_pm25": None, "aqi_overall": None}
+    result = {"aqi_o3": None, "aqi_pm25_airnow": None, "aqi_overall": None}
     overall = 0
     for obs in data:
         param = obs.get("ParameterName", "")
-        aqi   = obs.get("AQI", None)
-        if "OZONE" in param.upper():
+        aqi   = obs.get("AQI")
+        if aqi and "OZONE" in param.upper():
             result["aqi_o3"] = aqi
-        elif "PM2.5" in param.upper():
-            result["aqi_pm25"] = aqi
+        elif aqi and "PM2.5" in param.upper():
+            result["aqi_pm25_airnow"] = aqi
         if aqi and aqi > overall:
             overall = aqi
     result["aqi_overall"] = overall or None
     return result
 
 
-def fetch_ozone_lags(target: datetime.date) -> dict:
-    """
-    Fetch aqi_o3 for 3, 4, 5 days ago so retrain.py can compute the WMA
-    without needing to look backwards in signals.csv.
-    These are pre-computed here for convenience.
-    """
+def fetch_ozone_lags_from_omaq(target: datetime.date) -> dict:
+    """Ozone lags 3-5 days back from Open-Meteo AQ for respiratory WMA."""
     result = {"aqi_o3_lag3": None, "aqi_o3_lag4": None, "aqi_o3_lag5": None}
-    if not AIRNOW_KEY:
-        return result
     for lag, key in [(3, "aqi_o3_lag3"), (4, "aqi_o3_lag4"), (5, "aqi_o3_lag5")]:
         lag_date = target - datetime.timedelta(days=lag)
         try:
-            data = fetch_airnow(lag_date)
-            result[key] = data.get("aqi_o3")
+            aq = fetch_air_quality(lag_date)
+            result[key] = aq.get("aqi_o3_ugm3")
         except Exception as e:
-            print(f"  [WARN] ozone lag {lag}: {e}", file=sys.stderr)
+            print(f"  [WARN] O3 lag {lag}: {e}", file=sys.stderr)
     return result
 
 
-# ── CDC NSSP (ER visit % flu/COVID) ───────────────────────────────────────────
+# ── LOJIC: Crime (verified working) ──────────────────────────────────────────
+def fetch_lojic_crime(date: datetime.date) -> dict:
+    """
+    Group A (violent) crimes reported in last 7 days.
+    Queries current and previous year services to handle year boundaries.
+    Uses date_reported (1-2 day lag) not date_occurred.
+    """
+    start = (date - datetime.timedelta(days=7)).isoformat()
+    where = f"date_reported >= '{start}' AND nibrs_group_name = 'A'"
+    total = 0
+    for year in sorted({date.year - 1, date.year}):
+        svc = CRIME_SERVICES.get(year)
+        if not svc:
+            continue
+        url = f"{LOJIC_BASE}/{svc}/FeatureServer/0/query"
+        try:
+            r = requests.get(url, params={
+                "where": where, "returnCountOnly": True, "f": "json"
+            }, timeout=10)
+            r.raise_for_status()
+            total += r.json().get("count", 0)
+        except Exception as e:
+            print(f"  [WARN] LOJIC crime {year}: {e}", file=sys.stderr)
+    return {"crime_violent_7d": total}
+
+
+# ── LOJIC: ROW Permits (road disruption proxy) ────────────────────────────────
+# Dedicated crash service is access-restricted. ROW permits are the
+# actionable signal anyway — active road closures near the hospital
+# elevate MVA risk and affect EMS response times.
+ROW_CATCHMENT_ZIPS = {
+    "40202","40203","40204","40205","40206","40207","40208",
+    "40209","40210","40211","40212","40213","40214","40215",
+    "40216","40217","40218","40219","40220","40223",
+}
+
+def fetch_row_permits(date: datetime.date) -> dict:
+    """Active ROW construction permits in ED catchment area."""
+    url = f"{LOJIC_BASE}/Louisville_KY_ROW_Construction_Permits_new/FeatureServer/0/query"
+    r = requests.get(url, params={
+        "where": "1=1",
+        "outFields": "ZIP",
+        "resultRecordCount": 2000,
+        "f": "json"
+    }, timeout=15)
+    r.raise_for_status()
+    feats = r.json().get("features", [])
+    catchment = sum(
+        1 for f in feats
+        if str(f.get("attributes", {}).get("ZIP", "")) in ROW_CATCHMENT_ZIPS
+    )
+    return {"row_permits_catchment": catchment}
+
+
+# ── CDC NSSP ──────────────────────────────────────────────────────────────────
 def fetch_nssp(date: datetime.date) -> dict:
     week_end = date - datetime.timedelta(days=date.weekday())
     ds = week_end.strftime("%Y-%m-%dT00:00:00.000")
-    url = (
+    r = requests.get(
         "https://data.cdc.gov/resource/rdmq-nq56.json"
         f"?$where=week_end>='{ds}'&$limit=20"
-        "&geography=Kentucky&$order=week_end DESC"
+        "&geography=Kentucky&$order=week_end DESC",
+        timeout=15
     )
-    r = requests.get(url, timeout=15)
     r.raise_for_status()
-    rows = r.json()
     result = {"nssp_flu_pct": None, "nssp_covid_pct": None}
-    for row in rows:
+    for row in r.json():
         cat = row.get("pathogen", "").lower()
-        pct = row.get("percent_visits", None)
+        pct = row.get("percent_visits")
         if pct is None:
             continue
         pct = float(pct)
@@ -186,77 +263,57 @@ def fetch_nssp(date: datetime.date) -> dict:
     return result
 
 
-# ── CDC NWSS (wastewater COVID percentile) ────────────────────────────────────
+# ── CDC NWSS ──────────────────────────────────────────────────────────────────
 def fetch_nwss(date: datetime.date) -> dict:
-    ds = (date - datetime.timedelta(days=14)).isoformat()
-    url = (
+    """Jefferson County wastewater COVID percentile.
+    Fetches and filters client-side (server-side $where with AND is unreliable).
+    NWSS data only available through ~Sep 2025 for Jefferson County."""
+    ds = (date - datetime.timedelta(days=60)).isoformat()
+    r = requests.get(
         "https://data.cdc.gov/resource/2ew6-ywp6.json"
-        f"?$where=date_end>='{ds}'"
-        "&county_fips=21111"
-        "&$order=date_end DESC&$limit=5"
+        f"?county_fips=21111&$order=date_end DESC&$limit=30",
+        timeout=15
     )
-    r = requests.get(url, timeout=15)
     r.raise_for_status()
     rows = r.json()
-    if rows:
-        return {"nwss_percentile": rows[0].get("ptc_15d")}
+    # Filter: valid ptc_15d is 0-100, pick most recent valid
+    valid = [
+        row for row in rows
+        if row.get("ptc_15d") is not None
+        and 0 <= float(row["ptc_15d"]) <= 100
+        and row.get("date_end", "") >= ds
+    ]
+    if valid:
+        return {"nwss_percentile": float(valid[0]["ptc_15d"])}
     return {"nwss_percentile": None}
 
 
-# ── LOJIC ArcGIS: crime, EMS, collisions ─────────────────────────────────────
-def fetch_lojic_count(service_url: str, date: datetime.date, days: int = 7) -> int:
-    start = (date - datetime.timedelta(days=days)).strftime("%Y-%m-%d")
-    end   = date.strftime("%Y-%m-%d")
-    url = (
-        f"{service_url}/query"
-        f"?where=DATE_OCC>=DATE+'{start}'+AND+DATE_OCC<=DATE+'{end}'"
-        f"&returnCountOnly=true&f=json"
-    )
-    r = requests.get(url, timeout=15)
-    r.raise_for_status()
-    return r.json().get("count", 0)
-
-
-def fetch_lojic(date: datetime.date) -> dict:
-    base      = "https://maps.lojic.org/arcgis/rest/services"
-    crime_url = f"{base}/LMPD_Crime/MapServer/0"
-    ems_url   = f"{base}/EMS/MapServer/0"
-    coll_url  = f"{base}/Traffic_Collisions/MapServer/0"
-    return {
-        "crime_violent_7d": safe_get(lambda: fetch_lojic_count(crime_url, date), "LOJIC crime"),
-        "ems_runs_7d":      safe_get(lambda: fetch_lojic_count(ems_url,   date), "LOJIC EMS"),
-        "collisions_7d":    safe_get(lambda: fetch_lojic_count(coll_url,  date), "LOJIC collisions"),
-    }
-
-
-# ── Ticketmaster event attendance ─────────────────────────────────────────────
+# ── Ticketmaster ───────────────────────────────────────────────────────────────
 def fetch_events(date: datetime.date) -> dict:
     tm_key = os.environ.get("TICKETMASTER_API_KEY", "")
     if not tm_key:
         return {"event_attendance": None}
-    ds  = date.strftime("%Y-%m-%dT00:00:00Z")
-    de  = date.strftime("%Y-%m-%dT23:59:59Z")
-    url = (
+    ds = date.strftime("%Y-%m-%dT00:00:00Z")
+    de = date.strftime("%Y-%m-%dT23:59:59Z")
+    r = requests.get(
         f"https://app.ticketmaster.com/discovery/v2/events.json"
         f"?apikey={tm_key}&city=Louisville&stateCode=KY"
-        f"&startDateTime={ds}&endDateTime={de}&size=50"
+        f"&startDateTime={ds}&endDateTime={de}&size=50",
+        timeout=15
     )
-    r = requests.get(url, timeout=15)
     r.raise_for_status()
-    embedded = r.json().get("_embedded", {})
-    events = embedded.get("events", [])
+    events = r.json().get("_embedded", {}).get("events", [])
     total = 0
     for ev in events:
         venue = ev.get("_embedded", {}).get("venues", [{}])[0]
-        cap_str = venue.get("upcomingEvents", {}).get("_total", 0)
         try:
-            total += int(cap_str)
+            total += int(venue.get("upcomingEvents", {}).get("_total", 0))
         except Exception:
             pass
     return {"event_attendance": total or None}
 
 
-# ── Holiday check ─────────────────────────────────────────────────────────────
+# ── Holidays ───────────────────────────────────────────────────────────────────
 HOLIDAYS = {
     datetime.date(2024, 1, 1), datetime.date(2024, 1, 15),
     datetime.date(2024, 2, 19), datetime.date(2024, 5, 27),
@@ -282,65 +339,62 @@ def main():
     parser.add_argument("--date", help="Target date YYYY-MM-DD (default: yesterday)")
     args = parser.parse_args()
 
-    if args.date:
-        target = datetime.date.fromisoformat(args.date)
-    else:
-        target = datetime.date.today() - datetime.timedelta(days=1)
+    target = datetime.date.fromisoformat(args.date) if args.date \
+             else datetime.date.today() - datetime.timedelta(days=1)
 
     print(f"traumayellow · collect_signals.py · {target}")
 
-    # Check for duplicate
+    # Duplicate check
     if SIGNALS.exists():
-        existing = set()
         with open(SIGNALS) as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                existing.add(row["date"])
+            existing = {row["date"] for row in csv.DictReader(f)}
         if target.isoformat() in existing:
-            print(f"  Already have data for {target} — skipping.")
+            print(f"  Already have {target} — skipping.")
             return
 
-    row = {"date": target.isoformat()}
-    row["is_holiday"]  = int(target in HOLIDAYS)
-    row["day_of_week"] = target.weekday()
+    row = {
+        "date":        target.isoformat(),
+        "is_holiday":  int(target in HOLIDAYS),
+        "day_of_week": target.weekday(),
+    }
 
-    # Weather
     weather = safe_get(lambda: fetch_weather(target), "weather")
     row.update(weather or {})
 
-    # Temperature delta (behavioral surge signal)
     if weather and weather.get("temp_max_f") is not None:
         delta = safe_get(lambda: compute_temp_delta(target, weather["temp_max_f"]), "temp_delta")
         row.update(delta or {})
 
-    # AirNow
-    airnow = safe_get(lambda: fetch_airnow(target), "AirNow")
-    row.update(airnow or {})
+    aq = safe_get(lambda: fetch_air_quality(target), "Open-Meteo AQ")
+    row.update(aq or {})
 
-    # Ozone lags (for WMA respiratory signal)
-    o3_lags = safe_get(lambda: fetch_ozone_lags(target), "ozone lags")
+    # AirNow current obs only if collecting for today/yesterday
+    days_ago = (datetime.date.today() - target).days
+    if days_ago <= 1:
+        airnow = safe_get(fetch_airnow_current, "AirNow current")
+        row.update(airnow or {})
+
+    o3_lags = safe_get(lambda: fetch_ozone_lags_from_omaq(target), "O3 lags")
     row.update(o3_lags or {})
 
-    # CDC surveillance
     nssp = safe_get(lambda: fetch_nssp(target), "NSSP")
     row.update(nssp or {})
 
     nwss = safe_get(lambda: fetch_nwss(target), "NWSS")
     row.update(nwss or {})
 
-    # LOJIC community signals
-    lojic = safe_get(lambda: fetch_lojic(target), "LOJIC")
-    row.update(lojic or {})
+    crime = safe_get(lambda: fetch_lojic_crime(target), "LOJIC crime")
+    row.update(crime or {})
 
-    # Events
+    row_permits = safe_get(lambda: fetch_row_permits(target), "ROW permits")
+    row.update(row_permits or {})
+
     events = safe_get(lambda: fetch_events(target), "Ticketmaster")
     row.update(events or {})
 
-    # Ensure all columns present
     for col in COLUMNS:
         row.setdefault(col, "")
 
-    # Append to CSV
     SIGNALS.parent.mkdir(exist_ok=True)
     write_header = not SIGNALS.exists()
     with open(SIGNALS, "a", newline="") as f:
@@ -349,7 +403,9 @@ def main():
             writer.writeheader()
         writer.writerow(row)
 
-    print(f"  temp_delta={row.get('temp_delta')}°F  surge_flag={row.get('temp_surge_flag')}  aqi_o3={row.get('aqi_o3')}")
+    print(f"  weather: {row.get('temp_max_f')}°F  delta: {row.get('temp_delta')}°F  "
+          f"surge: {row.get('temp_surge_flag')}  pm25: {row.get('aqi_pm25')}  "
+          f"crime_7d: {row.get('crime_violent_7d')}  row: {row.get('row_permits_catchment')}")
     print("Done.")
 
 
