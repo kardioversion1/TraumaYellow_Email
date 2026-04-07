@@ -241,28 +241,46 @@ def fetch_row_permits(date: datetime.date) -> dict:
     return {"row_permits_catchment": catchment}
 
 
-# ── CDC NSSP ──────────────────────────────────────────────────────────────────
+# ── CDC NSSP (ER visit % + velocity) ─────────────────────────────────────────
 def fetch_nssp(date: datetime.date) -> dict:
-    week_end = date - datetime.timedelta(days=date.weekday())
-    ds = week_end.strftime("%Y-%m-%dT00:00:00.000")
+    """Fetch flu/COVID/RSV % + velocity (week-over-week change) for Kentucky."""
     r = requests.get(
         "https://data.cdc.gov/resource/rdmq-nq56.json"
-        f"?$where=week_end>='{ds}'&$limit=20"
-        "&geography=Kentucky&$order=week_end DESC",
+        "?geography=Kentucky&$order=week_end DESC&$limit=8",
         timeout=15
     )
     r.raise_for_status()
-    result = {"nssp_flu_pct": None, "nssp_covid_pct": None}
-    for row in r.json():
-        cat = row.get("pathogen", "").lower()
-        pct = row.get("percent_visits")
-        if pct is None:
-            continue
-        pct = float(pct)
-        if "influenza" in cat and result["nssp_flu_pct"] is None:
-            result["nssp_flu_pct"] = pct
-        if "covid" in cat and result["nssp_covid_pct"] is None:
-            result["nssp_covid_pct"] = pct
+    rows = r.json()
+    result = {
+        "nssp_flu_pct": None, "nssp_covid_pct": None,
+        "nssp_rsv_pct": None, "nssp_flu_trend": None,
+        "nssp_flu_velocity": None,
+    }
+    if not rows:
+        return result
+    week_data = {}
+    for row in rows:
+        wk = row.get("week_end", "")[:10]
+        if wk and wk not in week_data:
+            flu = row.get("percent_visits_influenza")
+            cov = row.get("percent_visits_covid")
+            rsv = row.get("percent_visits_rsv")
+            trend = row.get("ed_trends_influenza")
+            if flu is not None:
+                week_data[wk] = {
+                    "flu": float(flu), "cov": float(cov or 0),
+                    "rsv": float(rsv or 0), "trend": trend,
+                }
+    weeks = sorted(week_data.keys(), reverse=True)
+    if weeks:
+        latest = week_data[weeks[0]]
+        result["nssp_flu_pct"]   = round(latest["flu"], 2)
+        result["nssp_covid_pct"] = round(latest["cov"], 2)
+        result["nssp_rsv_pct"]   = round(latest["rsv"], 2)
+        result["nssp_flu_trend"] = latest["trend"]
+        if len(weeks) >= 2:
+            prev = week_data[weeks[1]]
+            result["nssp_flu_velocity"] = round(latest["flu"] - prev["flu"], 3)
     return result
 
 
@@ -289,6 +307,47 @@ def fetch_nwss(date: datetime.date) -> dict:
     if valid:
         return {"nwss_percentile": float(valid[0]["ptc_15d"])}
     return {"nwss_percentile": None}
+
+
+
+# ── NWS Severe Weather Alerts (free, no key) ─────────────────────────────────
+def fetch_nws_alerts(date: datetime.date) -> dict:
+    """Active NWS alerts for Louisville. Only meaningful for today/yesterday."""
+    days_ago = (datetime.date.today() - date).days
+    if days_ago > 1:
+        return {"nws_alert_count": 0, "power_risk_flag": 0}
+    r = requests.get(
+        f"https://api.weather.gov/alerts/active?point={LAT},{LON}",
+        headers={"User-Agent": "(traumayellow.com, evan.kuhl@gmail.com)"},
+        timeout=10
+    )
+    r.raise_for_status()
+    features = r.json().get("features", [])
+    events = [f["properties"].get("event", "").upper() for f in features]
+    power_keywords = ["WIND", "ICE", "WINTER STORM", "TORNADO", "THUNDERSTORM", "BLIZZARD"]
+    power_risk = int(any(kw in ev for ev in events for kw in power_keywords))
+    return {"nws_alert_count": len(features), "power_risk_flag": power_risk}
+
+
+# ── School calendar (JCPS) ────────────────────────────────────────────────────
+SCHOOL_OUT_RANGES = [
+    ("2024-06-05", "2024-08-06"), ("2024-10-07", "2024-10-11"),
+    ("2024-11-25", "2024-11-29"), ("2024-12-23", "2025-01-03"),
+    ("2025-03-31", "2025-04-04"), ("2025-06-04", "2025-08-05"),
+    ("2025-10-06", "2025-10-10"), ("2025-11-24", "2025-11-28"),
+    ("2025-12-22", "2026-01-02"), ("2026-03-30", "2026-04-03"),
+    ("2026-06-03", "2026-08-04"),
+    ("2024-05-03", "2024-05-03"), ("2025-05-02", "2025-05-02"),
+    ("2026-05-01", "2026-05-01"),
+]
+
+def is_school_day_out(date: datetime.date) -> bool:
+    if date.weekday() >= 5:
+        return True
+    if date in HOLIDAYS:
+        return True
+    ds = date.isoformat()
+    return any(s <= ds <= e for s, e in SCHOOL_OUT_RANGES)
 
 
 # ── Ticketmaster ───────────────────────────────────────────────────────────────
@@ -407,10 +466,10 @@ def main():
     row.update(nws or {})
 
     # School calendar (pure date logic, no API)
-    row["is_school_out"] = 0
-  #  row["is_school_night"] = int(
-   #     not is_school_day_out(target) and target.weekday() in (6, 0, 1, 2, 3)
-      # Sun-Thu during school weeks
+    row["is_school_out"]   = int(is_school_day_out(target))
+    row["is_school_night"] = int(
+        not is_school_day_out(target) and target.weekday() in (6, 0, 1, 2, 3)
+    )  # Sun-Thu during school weeks
 
     events = safe_get(lambda: fetch_events(target), "Ticketmaster")
     row.update(events or {})
