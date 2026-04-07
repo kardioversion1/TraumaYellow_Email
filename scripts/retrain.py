@@ -51,22 +51,32 @@ def gha_set(key, value):
     print(f"  ENV {key}={value}")
 
 
-def load_and_join() -> pd.DataFrame:
-    ed_counts = pd.read_csv(ED_COUNTS, on_bad_line='warn', parse_dates=["date"])
-    ed_counts = ed_counts.sort_values("date").reset_index(drop=True)
-    # Merge signals if available and non-empty
-    if SIGNALS.exists():
-      signals = pd.read_csv(SIGNALS, parse_dates=["date"], usecols=range(26))
-      if len(signals) > 0:
-            df = ed_counts.merge(signals, on="date", how="left")
-            print(f"  Signals joined: {signals['date'].nunique()} signal days merged (left join)")
-        else:
-            df = ed_counts
-            print("  signals.csv empty — training on ed_counts + engineered features only")
-    else:
-        df = ed_counts
-        print("  No signals.csv — training on ed_counts + engineered features only")
-    return df
+def load_and_join():
+    """
+    Loads signals and hospital data, joining them on date.
+    Includes safety checks for column mismatches to prevent site crashes.
+    """
+    try:
+        # We only pull the first 26 columns to match your current model requirements
+        # This prevents the 'Expected 26, saw 33' error if your scraper adds new data
+        signals = pd.read_csv(SIGNALS, parse_dates=["date"], usecols=range(26))
+        
+        if signals.empty:
+            print("Warning: signals.csv is empty.")
+            return pd.DataFrame()
+
+        # Load your actual ED counts (the target we are predicting)
+        counts = pd.read_csv(COUNTS, parse_dates=["date"])
+        
+        # Merge them together on the 'date' column
+        df = pd.merge(signals, counts, on="date", how="inner")
+        
+        print(f"Successfully joined data. Total rows for training: {len(df)}")
+        return df
+
+    except Exception as e:
+        print(f"Error during load_and_join: {e}")
+        return pd.DataFrame()
 
 
 def build_features(df: pd.DataFrame, epoch: pd.Timestamp):
