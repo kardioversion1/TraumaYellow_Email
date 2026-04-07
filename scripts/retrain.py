@@ -51,11 +51,13 @@ def gha_set(key, value):
 def load_and_join() -> pd.DataFrame:
     ed = pd.read_csv(ED_COUNTS, parse_dates=["date"]).sort_values("date").reset_index(drop=True)
     if SIGNALS.exists():
-        sig = pd.read_csv(SIGNALS, parse_dates=["date"])
+        try:
+            sig = pd.read_csv(SIGNALS, parse_dates=["date"], on_bad_lines="skip")
+        except TypeError:
+            sig = pd.read_csv(SIGNALS, parse_dates=["date"], error_bad_lines=False)
         if len(sig) > 0:
-            # Only use signal columns that exist — graceful if backfill is partial
             df = ed.merge(sig, on="date", how="left")
-            print(f"  Signals joined: {sig['date'].nunique()} signal days merged")
+            print(f"  Signals joined: {sig['date'].nunique()} signal days, {len(df.columns)} cols total")
             return df
     print("  No signals.csv or empty — training on ed_counts + engineered features only")
     return ed
