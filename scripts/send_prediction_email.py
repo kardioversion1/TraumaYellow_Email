@@ -252,8 +252,6 @@ def send_email(subject: str, html_body: str) -> None:
 
 
 def main():
-    is_stale = False 
-    first_forecast_date = None
     print("Fetching predictions.json...")
     payload = fetch_predictions()
 
@@ -284,7 +282,8 @@ def main():
         f"{p0['day']} → {p0['predicted']} visits"
     )
 
-    is_stale = (first_forecast_date is None) or                (first_forecast_date > today + datetime.timedelta(days=3))
+    first_forecast_date = datetime.date.fromisoformat(p0["date"])
+    is_stale = first_forecast_date > today_date + datetime.timedelta(days=3)
     print(f"Building email (top_alert={top_alert}, stale={is_stale})...")
     html = build_html(payload, now_str, is_stale=is_stale)
 
