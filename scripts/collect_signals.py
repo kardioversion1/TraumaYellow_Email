@@ -45,14 +45,17 @@ COLUMNS = [
     "aqi_o3", "aqi_pm25_airnow", "aqi_overall",
     # ozone lag columns for WMA respiratory signal
     "aqi_o3_lag3", "aqi_o3_lag4", "aqi_o3_lag5",
-    # CDC NSSP
-    "nssp_flu_pct", "nssp_covid_pct",
+    # CDC NSSP + velocity
+    "nssp_flu_pct", "nssp_covid_pct", "nssp_rsv_pct",
+    "nssp_flu_trend", "nssp_flu_velocity",
     # CDC NWSS
     "nwss_percentile",
+    # NWS severe weather alerts
+    "nws_alert_count", "power_risk_flag",
     # LOJIC community signals
     "crime_violent_7d", "row_permits_catchment",
-    # time
-    "is_holiday", "day_of_week",
+    # time + school calendar
+    "is_holiday", "day_of_week", "is_school_out", "is_school_night",
     # events
     "event_attendance",
 ]
@@ -399,6 +402,15 @@ def main():
 
     row_permits = safe_get(lambda: fetch_row_permits(target), "ROW permits")
     row.update(row_permits or {})
+
+    nws = safe_get(lambda: fetch_nws_alerts(target), "NWS alerts")
+    row.update(nws or {})
+
+    # School calendar (pure date logic, no API)
+    row["is_school_out"]   = int(is_school_day_out(target))
+    row["is_school_night"] = int(
+        not is_school_day_out(target) and target.weekday() in (6, 0, 1, 2, 3)
+    )  # Sun-Thu during school weeks
 
     events = safe_get(lambda: fetch_events(target), "Ticketmaster")
     row.update(events or {})
