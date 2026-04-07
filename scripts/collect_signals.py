@@ -410,7 +410,7 @@ def main():
     row["is_school_out"] = 0
   #  row["is_school_night"] = int(
    #     not is_school_day_out(target) and target.weekday() in (6, 0, 1, 2, 3)
-    )  # Sun-Thu during school weeks
+      # Sun-Thu during school weeks
 
     events = safe_get(lambda: fetch_events(target), "Ticketmaster")
     row.update(events or {})
