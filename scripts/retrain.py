@@ -52,7 +52,7 @@ def gha_set(key, value):
 
 
 def load_and_join() -> pd.DataFrame:
-    ed_counts = pd.read_csv(ED_COUNTS, parse_dates=["date"])
+    ed_counts = pd.read_csv(ED_COUNTS, on_bad_line='warn', parse_dates=["date"])
     ed_counts = ed_counts.sort_values("date").reset_index(drop=True)
     # Merge signals if available and non-empty
     if SIGNALS.exists():
