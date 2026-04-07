@@ -56,7 +56,7 @@ def load_and_join() -> pd.DataFrame:
     ed_counts = ed_counts.sort_values("date").reset_index(drop=True)
     # Merge signals if available and non-empty
     if SIGNALS.exists():
-        signals = pd.read_csv(SIGNALS, parse_dates=["date"], usecols=range(26))
+       signals = pd.read_csv(SIGNALS, parse_dates=["date"], usecols=range(26))
         if len(signals) > 0:
             df = ed_counts.merge(signals, on="date", how="left")
             print(f"  Signals joined: {signals['date'].nunique()} signal days merged (left join)")
