@@ -149,10 +149,15 @@ def build_features(df: pd.DataFrame, epoch: pd.Timestamp):
         "aqi_o3", "aqi_pm25_airnow", "aqi_overall",
         # ozone WMA respiratory lag (3-5 day weighted avg)
         "aqi_o3_wma",
-        # disease surveillance
-        "nssp_flu_pct", "nssp_covid_pct", "nwss_percentile",
+        # disease surveillance + velocity
+        "nssp_flu_pct", "nssp_covid_pct", "nssp_rsv_pct", "nssp_flu_velocity",
+        "nwss_percentile",
+        # severe weather / infrastructure risk
+        "nws_alert_count", "power_risk_flag",
         # community signals (verified LOJIC endpoints)
         "crime_violent_7d", "row_permits_catchment",
+        # school calendar
+        "is_school_out", "is_school_night",
         # events
         "event_attendance",
         # autoregressive
@@ -365,6 +370,33 @@ def main():
     top10 = dict(sorted(importance.items(), key=lambda x: -x[1])[:10])
     print(f"  Top features: {', '.join(top10.keys())}")
 
+    # ── Generate human-readable status briefing ───────────────────────────────
+    # Maps top signal features to clinical language for the email/dashboard
+    SIGNAL_LABELS = {
+        "nssp_flu_velocity":   "Rising Flu Velocity",
+        "nssp_flu_pct":        "Elevated Flu Activity",
+        "nssp_covid_pct":      "Elevated COVID Activity",
+        "nssp_rsv_pct":        "Elevated RSV Activity",
+        "power_risk_flag":     "Severe Weather / Power Risk",
+        "nws_alert_count":     "Active Weather Alerts",
+        "aqi_o3_wma":          "Ozone Lag Signal",
+        "aqi_pm25":            "Elevated PM2.5",
+        "temp_surge_flag":     "Sudden Temperature Shift",
+        "temp_delta":          "Temperature Delta",
+        "crime_violent_7d":    "Elevated Violent Crime",
+        "row_permits_catchment": "Road Disruptions",
+        "event_attendance":    "Major Event",
+        "is_school_out":       "School Break Period",
+        "visits_roll7":        "Recent Volume Trend",
+        "month_index":         "Seasonal Trend",
+    }
+    briefing_signals = [
+        SIGNAL_LABELS[feat] for feat in list(top10.keys())[:3]
+        if feat in SIGNAL_LABELS
+    ]
+    status_briefing = " & ".join(briefing_signals) if briefing_signals else "Baseline Conditions"
+    print(f"  Status briefing: {status_briefing}")
+
     # Save model + feature list
     MODEL_PKL.parent.mkdir(exist_ok=True)
     with open(MODEL_PKL, "wb") as f:
@@ -394,6 +426,7 @@ def main():
         "top_features":    top10,
         "dow_baselines":   dow_baselines,
         "top_alert":       top_alert,
+        "status_briefing": status_briefing,
         "forecast":        predictions,
     }
     with open(PREDS_JSON, "w") as f:
