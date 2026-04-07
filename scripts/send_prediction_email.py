@@ -72,6 +72,7 @@ def build_html(payload: dict, generated_at: str, is_stale: bool = False) -> str:
     last_actual   = payload.get("last_actual", "unknown")
     mae           = payload.get("mae", 9)
     training_rows = payload.get("training_rows", "?")
+    briefing      = payload.get("status_briefing", "Jewish Hospital ED · Daily Forecast")
     top_alert     = payload.get("top_alert")
 
     # Alert banner (shown when any of next 3 days is flagged)
@@ -169,14 +170,16 @@ def build_html(payload: dict, generated_at: str, is_stale: bool = False) -> str:
         <!-- Stale data warning (conditional) -->
         {stale_banner}
 
-        <!-- Subheader -->
+        <!-- Status briefing + subheader -->
         <tr>
-          <td colspan="4" style="padding:14px 28px 10px;border-bottom:2px solid #eee;">
-            <span style="font-size:13px;color:#888;">
+          <td colspan="4" style="padding:12px 28px 8px;border-bottom:2px solid #eee;">
+            <div style="font-size:15px;font-weight:600;color:#1a1a2e;margin-bottom:5px;">
+              {briefing}
+            </div>
+            <span style="font-size:12px;color:#888;">
               {generated_at} &nbsp;&middot;&nbsp; Next 3 days
               &nbsp;&middot;&nbsp; Retrained {model_ver}
-              &nbsp;&middot;&nbsp; MAE &plusmn;{int(mae)} &nbsp;&middot;&nbsp;
-              {training_rows} training rows
+              &nbsp;&middot;&nbsp; MAE &plusmn;{int(mae)}
             </span>
           </td>
         </tr>
