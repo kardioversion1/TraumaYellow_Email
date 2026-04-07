@@ -188,29 +188,48 @@ def fetch_ozone_lags_from_omaq(target: datetime.date) -> dict:
 
 
 # ── LOJIC: Crime (verified working) ──────────────────────────────────────────
+# Direct-ED-violence offense types (assault, robbery, homicide, rape)
+# These generate actual ED visits — more clinically relevant than NIBRS Group A
+# which includes 54k+ records of theft, fraud, etc.
+VIOLENT_OFFENSES = (
+    "offense_classification='8 ROBBERY' OR "
+    "offense_classification='9 AGGRAVATED ASSAULT' OR "
+    "offense_classification='11 SIMPLE ASSAULT' OR "
+    "offense_classification='4 FORCIBLE RAPE' OR "
+    "offense_classification='5 SODOMY FORCE' OR "
+    "offense_classification='1 HOMICIDE' OR "
+    "offense_classification='10 KIDNAPPING ONLY'"
+)
+
 def fetch_lojic_crime(date: datetime.date) -> dict:
     """
-    Group A (violent) crimes reported in last 7 days.
-    Queries current and previous year services to handle year boundaries.
-    Uses date_reported (1-2 day lag) not date_occurred.
+    Count direct-ED-violence crimes (assault, robbery, homicide, rape)
+    that OCCURRED in the 7 days before date.
+    Uses TIMESTAMP date filter on date_occurred (not date_reported).
+    Queries the year service matching the window to avoid cross-service duplication
+    — each service spans multiple years so we only query the most recent one that
+    covers the window.
+    Typical return: 130-270 per 7-day window for Louisville metro.
     """
-    start = (date - datetime.timedelta(days=7)).isoformat()
-    where = f"date_reported >= '{start}' AND nibrs_group_name = 'A'"
-    total = 0
-    for year in sorted({date.year - 1, date.year}):
-        svc = CRIME_SERVICES.get(year)
-        if not svc:
-            continue
-        url = f"{LOJIC_BASE}/{svc}/FeatureServer/0/query"
-        try:
-            r = requests.get(url, params={
-                "where": where, "returnCountOnly": True, "f": "json"
-            }, timeout=10)
-            r.raise_for_status()
-            total += r.json().get("count", 0)
-        except Exception as e:
-            print(f"  [WARN] LOJIC crime {year}: {e}", file=sys.stderr)
-    return {"crime_violent_7d": total}
+    start = date - datetime.timedelta(days=7)
+    # Use only the crime_data_2026 service — it spans 2020-present
+    # and avoids triple-counting from querying overlapping year services
+    svc = "crime_data_2026"
+    url = f"{LOJIC_BASE}/{svc}/FeatureServer/0/query"
+    where = (
+        f"date_occurred >= TIMESTAMP '{start.isoformat()} 00:00:00' "
+        f"AND date_occurred < TIMESTAMP '{date.isoformat()} 00:00:00' "
+        f"AND ({VIOLENT_OFFENSES})"
+    )
+    try:
+        r = requests.get(url, params={
+            "where": where, "returnCountOnly": True, "f": "json"
+        }, timeout=10)
+        r.raise_for_status()
+        return {"crime_violent_7d": r.json().get("count", 0)}
+    except Exception as e:
+        print(f"  [WARN] LOJIC crime: {e}", file=sys.stderr)
+        return {"crime_violent_7d": None}
 
 
 # ── LOJIC: ROW Permits (road disruption proxy) ────────────────────────────────
