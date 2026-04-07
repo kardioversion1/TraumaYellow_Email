@@ -276,14 +276,14 @@ def main():
     elif top_alert == "YELLOW":
         alert_prefix = "⚡ YELLOW · "
 
+    first_forecast_date = datetime.date.fromisoformat(p0["date"])
+    is_stale = first_forecast_date > today_date + datetime.timedelta(days=3)
+
     stale_prefix = "⚠️ STALE DATA · " if is_stale else ""
     subject = (
         f"{stale_prefix}{alert_prefix}ED Forecast {today_str}: "
         f"{p0['day']} → {p0['predicted']} visits"
     )
-
-    first_forecast_date = datetime.date.fromisoformat(p0["date"])
-    is_stale = first_forecast_date > today_date + datetime.timedelta(days=3)
     print(f"Building email (top_alert={top_alert}, stale={is_stale})...")
     html = build_html(payload, now_str, is_stale=is_stale)
 
