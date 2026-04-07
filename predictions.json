@@ -1,206 +1,155 @@
 {
-  "generated_at": "2026-04-07T00:51:14.036032Z",
+  "generated_at": "2026-04-07T01:26:18.929173Z",
   "model_version": "2026-04-07",
-  "training_rows": 598,
-  "holdout_rows": 14,
+  "training_rows": "?",
+  "holdout_rows": "?",
   "epoch": "2024-07-01",
   "last_actual": "2026-03-18",
-  "mae": 7.45,
-  "metrics": {
-    "mae": 7.45,
-    "within_10": 71.4,
-    "surge_recall": 66.7
-  },
-  "top_features": {
-    "day_of_week": 0.15322472155094147,
-    "dow_sin": 0.13666045665740967,
-    "month_index": 0.12736837565898895,
-    "days_since_epoch": 0.0986563041806221,
-    "visits_lag14": 0.06280035525560379,
-    "visits_roll14": 0.04928560182452202,
-    "dow_cos": 0.04801467806100845,
-    "visits_lag7": 0.04552987962961197,
-    "month": 0.04461684077978134,
-    "is_friday": 0.0443839468061924
-  },
-  "dow_baselines": {
-    "0": {
-      "mean": 81.27,
-      "std": 11.39,
-      "n": 88
-    },
-    "1": {
-      "mean": 76.66,
-      "std": 10.2,
-      "n": 88
-    },
-    "2": {
-      "mean": 76.98,
-      "std": 10.75,
-      "n": 88
-    },
-    "3": {
-      "mean": 75.45,
-      "std": 11.82,
-      "n": 87
-    },
-    "4": {
-      "mean": 76.8,
-      "std": 9.7,
-      "n": 87
-    },
-    "5": {
-      "mean": 66.08,
-      "std": 10.3,
-      "n": 87
-    },
-    "6": {
-      "mean": 66.14,
-      "std": 10.28,
-      "n": 87
-    }
-  },
+  "mae": 9,
+  "metrics": {},
+  "top_features": {},
+  "dow_baselines": {},
   "top_alert": null,
-  "status_briefing": "Seasonal Trend",
+  "status_briefing": "ED Forecast",
   "forecast": [
-    {
-      "date": "2026-04-07",
-      "day": "Tuesday",
-      "predicted": 73,
-      "band_low": 66,
-      "band_high": 81,
-      "z_score": -0.32,
-      "dow_mean": 76.7,
-      "alert": null
-    },
     {
       "date": "2026-04-08",
       "day": "Wednesday",
       "predicted": 72,
-      "band_low": 65,
-      "band_high": 80,
-      "z_score": -0.43,
-      "dow_mean": 77.0,
+      "band_low": 63,
+      "band_high": 81,
+      "z_score": 0.0,
+      "dow_mean": 72.3,
       "alert": null
     },
     {
       "date": "2026-04-09",
       "day": "Thursday",
       "predicted": 72,
-      "band_low": 65,
-      "band_high": 80,
-      "z_score": -0.25,
-      "dow_mean": 75.5,
+      "band_low": 63,
+      "band_high": 81,
+      "z_score": 0.0,
+      "dow_mean": 72.4,
       "alert": null
     },
     {
       "date": "2026-04-10",
       "day": "Friday",
       "predicted": 71,
-      "band_low": 64,
-      "band_high": 79,
-      "z_score": -0.58,
-      "dow_mean": 76.8,
+      "band_low": 62,
+      "band_high": 80,
+      "z_score": 0.0,
+      "dow_mean": 71.2,
       "alert": null
     },
     {
       "date": "2026-04-11",
       "day": "Saturday",
       "predicted": 67,
-      "band_low": 60,
-      "band_high": 75,
-      "z_score": 0.13,
-      "dow_mean": 66.1,
+      "band_low": 58,
+      "band_high": 76,
+      "z_score": 0.0,
+      "dow_mean": 67.4,
       "alert": null
     },
     {
       "date": "2026-04-12",
       "day": "Sunday",
       "predicted": 69,
-      "band_low": 61,
-      "band_high": 76,
-      "z_score": 0.26,
-      "dow_mean": 66.1,
+      "band_low": 60,
+      "band_high": 78,
+      "z_score": 0.0,
+      "dow_mean": 68.8,
       "alert": null
     },
     {
       "date": "2026-04-13",
       "day": "Monday",
       "predicted": 76,
-      "band_low": 69,
-      "band_high": 84,
-      "z_score": -0.42,
-      "dow_mean": 81.3,
+      "band_low": 67,
+      "band_high": 85,
+      "z_score": 0.0,
+      "dow_mean": 76.4,
       "alert": null
     },
     {
       "date": "2026-04-14",
       "day": "Tuesday",
       "predicted": 73,
-      "band_low": 66,
-      "band_high": 81,
-      "z_score": -0.32,
-      "dow_mean": 76.7,
+      "band_low": 64,
+      "band_high": 82,
+      "z_score": 0.0,
+      "dow_mean": 73.4,
       "alert": null
     },
     {
       "date": "2026-04-15",
       "day": "Wednesday",
       "predicted": 73,
-      "band_low": 65,
-      "band_high": 80,
-      "z_score": -0.39,
-      "dow_mean": 77.0,
+      "band_low": 64,
+      "band_high": 82,
+      "z_score": 0.0,
+      "dow_mean": 72.8,
       "alert": null
     },
     {
       "date": "2026-04-16",
       "day": "Thursday",
       "predicted": 73,
-      "band_low": 66,
-      "band_high": 80,
-      "z_score": -0.21,
-      "dow_mean": 75.5,
+      "band_low": 64,
+      "band_high": 82,
+      "z_score": 0.0,
+      "dow_mean": 73.0,
       "alert": null
     },
     {
       "date": "2026-04-17",
       "day": "Friday",
       "predicted": 74,
-      "band_low": 66,
-      "band_high": 81,
-      "z_score": -0.3,
-      "dow_mean": 76.8,
+      "band_low": 65,
+      "band_high": 83,
+      "z_score": 0.0,
+      "dow_mean": 73.9,
       "alert": null
     },
     {
       "date": "2026-04-18",
       "day": "Saturday",
       "predicted": 68,
-      "band_low": 60,
-      "band_high": 75,
-      "z_score": 0.14,
-      "dow_mean": 66.1,
+      "band_low": 59,
+      "band_high": 77,
+      "z_score": 0.0,
+      "dow_mean": 67.5,
       "alert": null
     },
     {
       "date": "2026-04-19",
       "day": "Sunday",
       "predicted": 68,
-      "band_low": 60,
-      "band_high": 75,
-      "z_score": 0.15,
-      "dow_mean": 66.1,
+      "band_low": 59,
+      "band_high": 77,
+      "z_score": 0.0,
+      "dow_mean": 67.7,
       "alert": null
     },
     {
       "date": "2026-04-20",
       "day": "Monday",
       "predicted": 74,
-      "band_low": 67,
-      "band_high": 82,
-      "z_score": -0.62,
-      "dow_mean": 81.3,
+      "band_low": 65,
+      "band_high": 83,
+      "z_score": 0.0,
+      "dow_mean": 74.2,
+      "alert": null
+    },
+    {
+      "date": "2026-04-21",
+      "day": "Tuesday",
+      "predicted": 72,
+      "band_low": 63,
+      "band_high": 81,
+      "z_score": 0.0,
+      "dow_mean": 72.1,
       "alert": null
     }
   ]
