@@ -58,21 +58,21 @@ def load_and_join():
     """
     try:
         # We only pull the first 26 columns to match your current model requirements
-        # This prevents the 'Expected 26, saw 33' error if your scraper adds new data
+        # This prevents the 'Expected 26, saw 33' error from your scraper
         signals = pd.read_csv(SIGNALS, parse_dates=["date"], usecols=range(26))
         
-        if signals.empty:
+        if not signals.empty:
+            # Load your actual ED counts (the target we are predicting)
+            counts = pd.read_csv(COUNTS, parse_dates=["date"])
+            
+            # Merge them together on the 'date' column
+            df = pd.merge(signals, counts, on="date", how="inner")
+            
+            print(f"Successfully joined data. Total rows for training: {len(df)}")
+            return df
+        else:
             print("Warning: signals.csv is empty.")
             return pd.DataFrame()
-
-        # Load your actual ED counts (the target we are predicting)
-        counts = pd.read_csv(COUNTS, parse_dates=["date"])
-        
-        # Merge them together on the 'date' column
-        df = pd.merge(signals, counts, on="date", how="inner")
-        
-        print(f"Successfully joined data. Total rows for training: {len(df)}")
-        return df
 
     except Exception as e:
         print(f"Error during load_and_join: {e}")
