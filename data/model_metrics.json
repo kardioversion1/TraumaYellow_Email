@@ -1,23 +1,23 @@
 {
   "retrain_date": "2026-04-07",
-  "training_rows": 618,
+  "training_rows": 617,
   "holdout_rows": 14,
   "epoch": "2024-07-01",
-  "last_actual": "2026-04-07",
-  "mae": 11.07,
-  "within_10": 64.3,
-  "surge_recall": 100.0,
+  "last_actual": "2026-04-06",
+  "mae": 8.01,
+  "within_10": 71.4,
+  "surge_recall": 66.7,
   "top_features": {
-    "is_weekend": 0.1337226778268814,
-    "month_index": 0.11748727411031723,
-    "is_monday": 0.11512991040945053,
-    "dow_sin": 0.08299940824508667,
-    "days_since_epoch": 0.04966504126787186,
-    "snowfall_mm": 0.048509206622838974,
-    "day_of_week": 0.04336355999112129,
-    "is_holiday": 0.03442592918872833,
-    "visits_lag14": 0.028411412611603737,
-    "event_attendance": 0.024577757343649864
+    "is_weekend": 0.17836520075798035,
+    "month_index": 0.10172604024410248,
+    "dow_sin": 0.09263204038143158,
+    "is_monday": 0.059347040951251984,
+    "day_of_week": 0.05033496022224426,
+    "snowfall_mm": 0.049777552485466,
+    "days_since_epoch": 0.04791141301393509,
+    "event_attendance": 0.032655563205480576,
+    "is_holiday": 0.028991082683205605,
+    "visits_lag14": 0.027615848928689957
   },
   "dow_baselines": {
     "0": {
@@ -26,9 +26,9 @@
       "n": 91
     },
     "1": {
-      "mean": 75.76,
-      "std": 11.72,
-      "n": 91
+      "mean": 76.36,
+      "std": 10.3,
+      "n": 90
     },
     "2": {
       "mean": 76.88,
