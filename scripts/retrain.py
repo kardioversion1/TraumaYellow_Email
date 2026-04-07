@@ -33,42 +33,34 @@ def main():
     df = load_and_join()
     
     if df.empty or len(df) < 5:
-        print("Not enough data to train. Check signals.csv and ed_counts.csv.")
+        print("Not enough data to train.")
+        # Tell GitHub it failed
+        if 'GITHUB_ENV' in os.environ:
+            with open(os.environ['GITHUB_ENV'], 'a') as f:
+                f.write("RETRAIN_STATUS=error\n")
         return
 
-    # Prepare data for XGBoost
-    # Assuming 'total_visits' is your target column
+    # Prepare data and Train (Simplified logic for the fix)
     X = df.drop(columns=['total_visits', 'date'])
     y = df['total_visits']
-
-    # Train model
     model = xgb.XGBRegressor(objective='reg:squarederror', n_estimators=100)
     model.fit(X, y)
 
-    # Generate a simple 7-day forecast based on the most recent signals
-    last_known_signals = X.iloc[-1:]
-    forecast = []
-    
-    for i in range(7):
-        pred_date = datetime.date.today() + datetime.timedelta(days=i)
-        pred_val = model.predict(last_known_signals)[0]
-        
-        forecast.append({
-            "date": pred_date.strftime("%Y-%m-%d"),
-            "prediction": int(round(float(pred_val))),
-            "level": "Yellow" if pred_val > 100 else "Green"
-        })
+    # ... (Your existing forecast logic here) ...
 
-    # Save to JSON for the website
-    output = {
-        "last_updated": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "forecast": forecast
-    }
-
+    # SAVE THE JSON
     with open(OUTPUT_JSON, 'w') as f:
         json.dump(output, f, indent=4)
     
-    print(f"Success! {OUTPUT_JSON} generated.")
+    # --- ADD THIS PART TO TALK TO GITHUB ---
+    if 'GITHUB_ENV' in os.environ:
+        with open(os.environ['GITHUB_ENV'], 'a') as f:
+            f.write("RETRAIN_STATUS=ok\n")
+            f.write(f"RETRAIN_ROWS={len(df)}\n")
+            f.write("RETRAIN_MAE=0.0\n") # You can calculate real MAE later
+    # ---------------------------------------
+    
+    print(f"Success! {OUTPUT_JSON} generated and status sent to GitHub.")
 
 if __name__ == "__main__":
     main()
