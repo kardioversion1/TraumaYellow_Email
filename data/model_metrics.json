@@ -4,20 +4,20 @@
   "holdout_rows": 14,
   "epoch": "2024-07-01",
   "last_actual": "2026-03-18",
-  "mae": 7.86,
+  "mae": 7.21,
   "within_10": 71.4,
-  "surge_recall": 66.7,
+  "surge_recall": 100.0,
   "top_features": {
-    "month_index": 0.17072156071662903,
-    "day_of_week": 0.1207992359995842,
-    "dow_sin": 0.09135343134403229,
-    "days_since_epoch": 0.0759376510977745,
-    "snowfall_mm": 0.07387138903141022,
-    "is_holiday": 0.04797971248626709,
-    "visits_lag14": 0.03982437402009964,
-    "dow_cos": 0.027263151481747627,
-    "cloud_cover_pct": 0.02674938179552555,
-    "visits_lag7": 0.023202089592814445
+    "is_weekend": 0.2735286355018616,
+    "month_index": 0.1335935890674591,
+    "dow_sin": 0.07138238847255707,
+    "snowfall_mm": 0.049508146941661835,
+    "days_since_epoch": 0.04920951649546623,
+    "day_of_week": 0.041365113109350204,
+    "is_monday": 0.03828446567058563,
+    "is_holiday": 0.03569122776389122,
+    "visits_lag14": 0.028282349929213524,
+    "cloud_cover_pct": 0.018933946266770363
   },
   "dow_baselines": {
     "0": {
