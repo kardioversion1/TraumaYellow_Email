@@ -252,6 +252,7 @@ def send_email(subject: str, html_body: str) -> None:
 
 
 def main():
+    is_stale = False
     print("Fetching predictions.json...")
     payload = fetch_predictions()
 
