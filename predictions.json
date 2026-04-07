@@ -1,206 +1,206 @@
 {
-  "generated_at": "2026-04-07T12:22:10.284095Z",
+  "generated_at": "2026-04-07T14:40:12.988646Z",
   "model_version": "2026-04-07",
-  "training_rows": 598,
+  "training_rows": 618,
   "holdout_rows": 14,
   "epoch": "2024-07-01",
-  "last_actual": "2026-03-18",
-  "mae": 7.4,
+  "last_actual": "2026-04-07",
+  "mae": 11.07,
   "metrics": {
-    "mae": 7.4,
-    "within_10": 71.4,
-    "surge_recall": 66.7
+    "mae": 11.07,
+    "within_10": 64.3,
+    "surge_recall": 100.0
   },
   "top_features": {
-    "month_index": 0.13864947855472565,
-    "is_weekend": 0.13716831803321838,
-    "dow_sin": 0.0753234401345253,
-    "is_monday": 0.07351084798574448,
-    "snowfall_mm": 0.05325518548488617,
-    "days_since_epoch": 0.05176292359828949,
-    "day_of_week": 0.04954267665743828,
-    "is_holiday": 0.036325808614492416,
-    "visits_lag14": 0.02862122841179371,
-    "event_attendance": 0.02284073643386364
+    "is_weekend": 0.1337226778268814,
+    "month_index": 0.11748727411031723,
+    "is_monday": 0.11512991040945053,
+    "dow_sin": 0.08299940824508667,
+    "days_since_epoch": 0.04966504126787186,
+    "snowfall_mm": 0.048509206622838974,
+    "day_of_week": 0.04336355999112129,
+    "is_holiday": 0.03442592918872833,
+    "visits_lag14": 0.028411412611603737,
+    "event_attendance": 0.024577757343649864
   },
   "dow_baselines": {
     "0": {
-      "mean": 81.27,
-      "std": 11.39,
-      "n": 88
+      "mean": 80.95,
+      "std": 11.43,
+      "n": 91
     },
     "1": {
-      "mean": 76.66,
-      "std": 10.2,
-      "n": 88
+      "mean": 75.76,
+      "std": 11.72,
+      "n": 91
     },
     "2": {
-      "mean": 76.98,
-      "std": 10.75,
-      "n": 88
+      "mean": 76.88,
+      "std": 10.65,
+      "n": 90
     },
     "3": {
-      "mean": 75.45,
-      "std": 11.82,
-      "n": 87
+      "mean": 75.58,
+      "std": 11.64,
+      "n": 90
     },
     "4": {
-      "mean": 76.8,
-      "std": 9.7,
-      "n": 87
+      "mean": 76.54,
+      "std": 9.75,
+      "n": 90
     },
     "5": {
-      "mean": 66.08,
-      "std": 10.3,
-      "n": 87
+      "mean": 65.94,
+      "std": 10.25,
+      "n": 90
     },
     "6": {
-      "mean": 66.14,
-      "std": 10.28,
-      "n": 87
+      "mean": 65.82,
+      "std": 10.31,
+      "n": 90
     }
   },
   "top_alert": null,
   "status_briefing": "Seasonal Trend",
   "forecast": [
     {
-      "date": "2026-04-07",
-      "day": "Tuesday",
-      "predicted": 67,
-      "band_low": 60,
-      "band_high": 74,
-      "z_score": -0.94,
-      "dow_mean": 76.7,
-      "alert": null
-    },
-    {
       "date": "2026-04-08",
       "day": "Wednesday",
-      "predicted": 68,
-      "band_low": 61,
-      "band_high": 75,
-      "z_score": -0.83,
-      "dow_mean": 77.0,
+      "predicted": 69,
+      "band_low": 58,
+      "band_high": 80,
+      "z_score": -0.72,
+      "dow_mean": 76.9,
       "alert": null
     },
     {
       "date": "2026-04-09",
       "day": "Thursday",
       "predicted": 67,
-      "band_low": 60,
-      "band_high": 75,
-      "z_score": -0.68,
-      "dow_mean": 75.5,
+      "band_low": 56,
+      "band_high": 78,
+      "z_score": -0.7,
+      "dow_mean": 75.6,
       "alert": null
     },
     {
       "date": "2026-04-10",
       "day": "Friday",
       "predicted": 69,
-      "band_low": 61,
-      "band_high": 76,
-      "z_score": -0.85,
-      "dow_mean": 76.8,
+      "band_low": 58,
+      "band_high": 80,
+      "z_score": -0.77,
+      "dow_mean": 76.5,
       "alert": null
     },
     {
       "date": "2026-04-11",
       "day": "Saturday",
-      "predicted": 64,
-      "band_low": 56,
-      "band_high": 71,
-      "z_score": -0.22,
-      "dow_mean": 66.1,
+      "predicted": 57,
+      "band_low": 46,
+      "band_high": 68,
+      "z_score": -0.9,
+      "dow_mean": 65.9,
       "alert": null
     },
     {
       "date": "2026-04-12",
       "day": "Sunday",
-      "predicted": 64,
-      "band_low": 56,
-      "band_high": 71,
-      "z_score": -0.24,
-      "dow_mean": 66.1,
+      "predicted": 56,
+      "band_low": 45,
+      "band_high": 68,
+      "z_score": -0.9,
+      "dow_mean": 65.8,
       "alert": null
     },
     {
       "date": "2026-04-13",
       "day": "Monday",
-      "predicted": 71,
+      "predicted": 74,
       "band_low": 63,
-      "band_high": 78,
-      "z_score": -0.92,
-      "dow_mean": 81.3,
+      "band_high": 85,
+      "z_score": -0.62,
+      "dow_mean": 81.0,
       "alert": null
     },
     {
       "date": "2026-04-14",
       "day": "Tuesday",
-      "predicted": 68,
-      "band_low": 61,
-      "band_high": 76,
-      "z_score": -0.84,
-      "dow_mean": 76.7,
+      "predicted": 69,
+      "band_low": 58,
+      "band_high": 80,
+      "z_score": -0.57,
+      "dow_mean": 75.8,
       "alert": null
     },
     {
       "date": "2026-04-15",
       "day": "Wednesday",
-      "predicted": 68,
-      "band_low": 61,
-      "band_high": 76,
-      "z_score": -0.8,
-      "dow_mean": 77.0,
+      "predicted": 70,
+      "band_low": 59,
+      "band_high": 81,
+      "z_score": -0.66,
+      "dow_mean": 76.9,
       "alert": null
     },
     {
       "date": "2026-04-16",
       "day": "Thursday",
       "predicted": 68,
-      "band_low": 61,
-      "band_high": 76,
-      "z_score": -0.59,
-      "dow_mean": 75.5,
+      "band_low": 57,
+      "band_high": 80,
+      "z_score": -0.61,
+      "dow_mean": 75.6,
       "alert": null
     },
     {
       "date": "2026-04-17",
       "day": "Friday",
       "predicted": 70,
-      "band_low": 62,
-      "band_high": 77,
-      "z_score": -0.74,
-      "dow_mean": 76.8,
+      "band_low": 59,
+      "band_high": 81,
+      "z_score": -0.64,
+      "dow_mean": 76.5,
       "alert": null
     },
     {
       "date": "2026-04-18",
       "day": "Saturday",
-      "predicted": 64,
-      "band_low": 57,
-      "band_high": 72,
-      "z_score": -0.16,
-      "dow_mean": 66.1,
+      "predicted": 58,
+      "band_low": 47,
+      "band_high": 69,
+      "z_score": -0.81,
+      "dow_mean": 65.9,
       "alert": null
     },
     {
       "date": "2026-04-19",
       "day": "Sunday",
-      "predicted": 64,
-      "band_low": 56,
-      "band_high": 71,
-      "z_score": -0.23,
-      "dow_mean": 66.1,
+      "predicted": 57,
+      "band_low": 46,
+      "band_high": 68,
+      "z_score": -0.82,
+      "dow_mean": 65.8,
       "alert": null
     },
     {
       "date": "2026-04-20",
       "day": "Monday",
-      "predicted": 70,
+      "predicted": 74,
       "band_low": 63,
-      "band_high": 78,
-      "z_score": -0.98,
-      "dow_mean": 81.3,
+      "band_high": 85,
+      "z_score": -0.59,
+      "dow_mean": 81.0,
+      "alert": null
+    },
+    {
+      "date": "2026-04-21",
+      "day": "Tuesday",
+      "predicted": 70,
+      "band_low": 59,
+      "band_high": 81,
+      "z_score": -0.52,
+      "dow_mean": 75.8,
       "alert": null
     }
   ]
