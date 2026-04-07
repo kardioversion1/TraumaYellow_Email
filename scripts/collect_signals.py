@@ -407,9 +407,9 @@ def main():
     row.update(nws or {})
 
     # School calendar (pure date logic, no API)
-    row["is_school_out"]   = int(is_school_day_out(target))
-    row["is_school_night"] = int(
-        not is_school_day_out(target) and target.weekday() in (6, 0, 1, 2, 3)
+    row["is_school_out"] = 0
+  #  row["is_school_night"] = int(
+   #     not is_school_day_out(target) and target.weekday() in (6, 0, 1, 2, 3)
     )  # Sun-Thu during school weeks
 
     events = safe_get(lambda: fetch_events(target), "Ticketmaster")
