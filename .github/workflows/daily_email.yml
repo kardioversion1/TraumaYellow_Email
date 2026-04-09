@@ -1,13 +1,14 @@
-name: Daily ED Prediction Email
+name: Daily forecast email
 
 on:
   schedule:
-    # 06:00 AM ET = 11:00 UTC
-    - cron: '0 10 * * *'   # 06:00 AM ET
+    # 06:00 AM ET = 10:00 UTC
+    # Runs after signal collection (05:30) and forecast refresh (05:45)
+    - cron: '0 10 * * *'
   workflow_dispatch:
 
 jobs:
-  send-prediction-email:
+  send-email:
     runs-on: ubuntu-latest
 
     steps:
@@ -23,12 +24,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-email-${{ hashFiles('requirements.txt') }}
+          key: ${{ runner.os }}-pip-email-${{ hashFiles('requirements-email.txt') }}
 
       - name: Install dependencies
-        run: pip install requests
+        run: pip install -r requirements-email.txt
 
-      - name: Send prediction email
+      - name: Send forecast email
         env:
           GMAIL_APP_PW: ${{ secrets.GMAIL_APP_PW }}
           RECIPIENT:    ${{ secrets.RECIPIENT }}
