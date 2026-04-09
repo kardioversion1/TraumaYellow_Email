@@ -35,6 +35,7 @@ MODEL_PKL  = ROOT / "model" / "model.pkl"
 FEAT_JSON  = ROOT / "model" / "feature_list.json"
 PREDS_JSON = ROOT / "predictions" / "predictions.json"
 METRICS    = ROOT / "data" / "model_metrics.json"
+PRED_HIST  = ROOT / "data" / "predictions_history.csv"
 
 MIN_ROWS = 60
 HOLDOUT  = 14
@@ -310,6 +311,43 @@ def generate_predictions(model, df, epoch, feature_cols, dow_baselines, mae) -> 
     return results
 
 
+
+def write_predictions_history(model, df, feature_cols, mae: float):
+    """
+    Append historical predictions to predictions_history.csv.
+    One row per date in df (where we have actual visit data).
+    Columns: date, predicted, band_lo, band_hi, actual, model_date
+    Existing rows for the same date are overwritten so reruns stay clean.
+    """
+    import datetime
+    today_str = datetime.date.today().isoformat()
+
+    X = df[feature_cols].fillna(0)
+    preds = np.maximum(model.predict(X), 0)
+
+    new_rows = pd.DataFrame({
+        "date":       df["date"].dt.strftime("%Y-%m-%d"),
+        "predicted":  np.round(preds).astype(int),
+        "band_lo":    np.maximum(0, np.round(preds - mae)).astype(int),
+        "band_hi":    np.round(preds + mae).astype(int),
+        "actual":     df["total_visits"].apply(
+                          lambda v: str(int(v)) if pd.notna(v) else ""),
+        "model_date": today_str,
+    })
+
+    if PRED_HIST.exists():
+        existing = pd.read_csv(PRED_HIST)
+        # Drop rows whose dates appear in new_rows (overwrite with fresh predictions)
+        existing = existing[~existing["date"].isin(new_rows["date"])]
+        combined = pd.concat([existing, new_rows], ignore_index=True)
+    else:
+        combined = new_rows
+
+    combined = combined.sort_values("date").reset_index(drop=True)
+    combined.to_csv(PRED_HIST, index=False)
+    print(f"  predictions_history.csv → {len(combined)} rows  ({combined['date'].iloc[0]} to {combined['date'].iloc[-1]})")
+
+
 def main():
     print(f"traumayellow · retrain.py · {datetime.datetime.utcnow().isoformat()} UTC")
 
@@ -371,6 +409,9 @@ def main():
     with open(FEAT_JSON, "w") as f:
         json.dump(feature_cols, f)
     print(f"  Model → {MODEL_PKL}")
+
+    # Write historical predictions to persistent CSV
+    write_predictions_history(model, df, feature_cols, metrics["mae"])
 
     # Generate predictions
     predictions = generate_predictions(model, df, epoch, feature_cols,
