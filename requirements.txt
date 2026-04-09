@@ -1,3 +1,4 @@
+# Core pipeline dependencies (collect, retrain, refresh)
 xgboost>=2.0,<3.0
 scikit-learn>=1.3,<2.0
 pandas>=2.0,<3.0
