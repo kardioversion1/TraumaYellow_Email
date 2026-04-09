@@ -2,7 +2,8 @@ name: Daily forecast refresh
 
 on:
   schedule:
-    # 09:45 UTC = 5:45 AM ET — after collect (5:30), before email (6:00)
+    # 05:45 AM ET = 09:45 UTC
+    # Runs after signal collection (05:30), before email (06:00)
     - cron: '45 9 * * *'
   workflow_dispatch:
 
