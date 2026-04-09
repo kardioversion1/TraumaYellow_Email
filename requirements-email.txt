@@ -1,6 +1,5 @@
-# requirements-email.txt
-# Minimal deps for the daily prediction email job.
-# Keep separate from the main retrain/collect requirements to keep the job fast.
+# Minimal dependencies for the daily forecast email job
+# Kept separate from the main requirements to keep the email job fast
 xgboost>=2.0
 pandas>=2.0
 numpy>=1.26
