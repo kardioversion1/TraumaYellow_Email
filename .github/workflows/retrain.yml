@@ -2,7 +2,8 @@ name: Weekly model retrain
 
 on:
   schedule:
-    # 07:00 ET Sunday = 12:00 UTC Sunday (after Saturday's signals are collected)
+    # 07:00 AM ET Sunday = 12:00 UTC Sunday
+    # Runs after Saturday signals are collected
     - cron: '0 12 * * 0'
   workflow_dispatch:
 
@@ -35,12 +36,13 @@ jobs:
       - name: Retrain model
         run: python scripts/retrain.py
 
-      - name: Commit model + metrics
+      - name: Commit model + data outputs
         if: env.RETRAIN_STATUS == 'ok'
         run: |
           git config user.name  "traumayellow-bot"
           git config user.email "bot@traumayellow.com"
-          git add model/model.pkl model/feature_list.json data/model_metrics.json
+          git add model/model.pkl model/feature_list.json
+          git add data/model_metrics.json data/predictions_history.csv
           git diff --cached --quiet || git commit -m \
             "model: retrain $(date -u +%Y-%m-%d) · MAE=${{ env.RETRAIN_MAE }} · N=${{ env.RETRAIN_ROWS }} rows"
           git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:main
