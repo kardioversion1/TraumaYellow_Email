@@ -2,8 +2,9 @@ name: Daily signal collection
 
 on:
   schedule:
-    # 06:00 ET = 11:00 UTC (runs after midnight closes out yesterday's data)
-    - cron: '30 9 * * *'   # 05:30 AM ET — collects before 6 AM email
+    # 05:30 AM ET = 09:30 UTC
+    # Runs first in the daily sequence, before forecast refresh and email
+    - cron: '30 9 * * *'
   workflow_dispatch:
     inputs:
       date:
