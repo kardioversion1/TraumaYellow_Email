@@ -1,5 +1,5 @@
 {
-  "retrain_date": "2026-05-17",
+  "retrain_date": "2026-05-24",
   "training_rows": 654,
   "holdout_rows": 14,
   "epoch": "2024-07-01",
