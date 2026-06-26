@@ -1,6 +1,6 @@
 # traumayellow
 
-ED patient volume prediction and staffing intelligence for Jewish Hospital Downtown (UofL Health).
+ED patient volume prediction and staffing intelligence
 
 > **see the surge before it arrives**
 
