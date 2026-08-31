@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-08-30T14:31:36.306293Z",
-  "model_version": "2026-08-30",
+  "generated_at": "2026-08-31T17:14:31.161611Z",
+  "model_version": "2026-08-31",
   "training_rows": "?",
   "holdout_rows": "?",
   "epoch": "2024-07-01",
@@ -12,16 +12,6 @@
   "top_alert": null,
   "status_briefing": "ED Forecast",
   "forecast": [
-    {
-      "date": "2026-08-31",
-      "day": "Monday",
-      "predicted": 73,
-      "band_low": 64,
-      "band_high": 82,
-      "z_score": 0.0,
-      "dow_mean": 72.9,
-      "alert": null
-    },
     {
       "date": "2026-09-01",
       "day": "Tuesday",
@@ -150,6 +140,16 @@
       "band_high": 70,
       "z_score": 0.0,
       "dow_mean": 60.9,
+      "alert": null
+    },
+    {
+      "date": "2026-09-14",
+      "day": "Monday",
+      "predicted": 78,
+      "band_low": 69,
+      "band_high": 87,
+      "z_score": 0.0,
+      "dow_mean": 77.7,
       "alert": null
     }
   ]
